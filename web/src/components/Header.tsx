@@ -8,6 +8,7 @@ interface HeaderProps {
   onOpenScraperModal: () => void;
   onOpenCampaignModal: () => void;
   isRefreshing?: boolean;
+  isCooldown?: boolean;
   totalProducts?: number;
 }
 
@@ -16,6 +17,7 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenScraperModal,
   onOpenCampaignModal,
   isRefreshing = false,
+  isCooldown = false,
   totalProducts = 0,
 }) => {
   const handleExport = () => {
@@ -47,15 +49,25 @@ export const Header: React.FC<HeaderProps> = ({
 
         {/* Database Live Status & Actions */}
         <div className="flex items-center space-x-2.5 sm:space-x-3">
-          {/* SQLite WAL indicator */}
-          <div className="hidden lg:flex items-center space-x-2 px-3 py-1.5 rounded-lg bg-slate-800/80 border border-slate-700/70 text-xs text-slate-300">
-            <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-            </span>
-            <Database className="w-3.5 h-3.5 text-cyan-400" />
-            <span>SQLite (WAL Mode)</span>
-          </div>
+          {/* Circuit Breaker Warning Pill (When 429/403 triggered) */}
+          {isCooldown ? (
+            <div className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-red-950/90 border border-red-500 text-xs text-red-300 animate-pulse font-bold">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
+              </span>
+              <span>🚨 Circuit Breaker Active (Cooling Down)</span>
+            </div>
+          ) : (
+            <div className="hidden lg:flex items-center space-x-2 px-3 py-1.5 rounded-lg bg-slate-800/80 border border-slate-700/70 text-xs text-slate-300">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-cyan-500"></span>
+              </span>
+              <Database className="w-3.5 h-3.5 text-cyan-400" />
+              <span>Live Sync: 5s (WAL)</span>
+            </div>
+          )}
 
           {/* Anti-Ban Campaign Planner Button */}
           <button

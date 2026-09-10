@@ -3,78 +3,56 @@ import { getAllProducts } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
-const ODOO_UOM_MAPPING: Record<string, string> = {
-  PCS: "Units",
-  SET: "Units",
-  PAIR: "Pairs",
-  MTR: "m",
-  ROLL: "Units",
-  BOX: "Units",
-  PKT: "Units",
-  KG: "kg",
-  LTR: "L",
-  DRUM: "Units",
-  CAN: "Units",
-  BAG: "Units",
-};
-
-function escapeCsv(field: any): string {
+/**
+ * Standard RFC-4180 CSV field escape function.
+ * Wraps in quotes and escapes internal quotes with double-quotes ("").
+ */
+function escapeCsvField(field: any): string {
   if (field === null || field === undefined) return '""';
-  const str = String(field).replace(/\r\n/g, " ").replace(/\n/g, " ").replace(/"/g, '""');
-  return `"${str}"`;
+  const str = String(field);
+  // If the field contains commas, double quotes, or newlines, wrap in quotes and escape quotes
+  const escaped = str.replace(/"/g, '""');
+  return `"${escaped}"`;
 }
 
 export async function GET() {
   try {
+    // Only exports valid active/verified products (skips 'not_found' sequence gaps)
     const products = getAllProducts();
 
+    // Exactly the 5 columns requested for Odoo 18/19 product import:
+    // default_code, name, description, uom_id, categ_id
     const headers = [
-      "id",
       "default_code",
       "name",
-      "description_sale",
-      "description_purchase",
-      "categ_id",
+      "description",
       "uom_id",
-      "uom_po_id",
-      "type",
-      "sale_ok",
-      "purchase_ok",
-      "tracking",
-      "image_1920",
+      "categ_id",
     ];
 
     const lines: string[] = [headers.join(",")];
 
     for (const p of products) {
       const impaCode = String(p.impa_code).padStart(6, "0");
-      const catCode = p.category_code || impaCode.substring(0, 2);
-      const catName = p.category_name || "General Marine Equipment";
-      const uomRaw = (p.uom || "PCS").toUpperCase();
-      const odooUom = ODOO_UOM_MAPPING[uomRaw] || "Units";
+      const name = p.product_name || `IMPA Product ${impaCode}`;
+      const description = p.description || "";
+      const rawUom = p.uom || "PCS";
+      const categoryName = p.category_name || "General Marine Stores";
 
       const row = [
-        escapeCsv(`impa_product_${impaCode}`),
-        escapeCsv(impaCode),
-        escapeCsv(p.product_name),
-        escapeCsv(p.description || ""),
-        escapeCsv(`IMPA Code: ${impaCode} - ${p.description || ""}`),
-        escapeCsv(`All / Marine Stores / ${catCode} - ${catName}`),
-        escapeCsv(odooUom),
-        escapeCsv(odooUom),
-        escapeCsv("consu"),
-        escapeCsv("True"),
-        escapeCsv("True"),
-        escapeCsv("none"),
-        escapeCsv(p.image_url || ""),
+        escapeCsvField(impaCode),
+        escapeCsvField(name),
+        escapeCsvField(description),
+        escapeCsvField(rawUom),
+        escapeCsvField(categoryName),
       ];
 
       lines.push(row.join(","));
     }
 
-    // Include UTF-8 BOM so Excel opens cleanly
-    const csvContent = "\uFEFF" + lines.join("\n");
-    const filename = `odoo_impa_catalog_${new Date().toISOString().slice(0, 10)}.csv`;
+    // Prepend UTF-8 BOM (\uFEFF) so Excel and text editors handle international chars properly
+    const csvContent = "\uFEFF" + lines.join("\r\n");
+    const filename = `odoo_impa_import_${new Date().toISOString().slice(0, 10)}.csv`;
 
     return new NextResponse(csvContent, {
       status: 200,
@@ -85,7 +63,7 @@ export async function GET() {
       },
     });
   } catch (error: any) {
-    console.error("Error in /api/export:", error);
+    console.error("Error generating Odoo CSV export:", error);
     return NextResponse.json(
       { error: "Failed to generate export", details: error.message },
       { status: 500 }
