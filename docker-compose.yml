@@ -6,7 +6,8 @@ services:
     container_name: impa-marine-platform
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      # External host port: 3005 (can be customized via HOST_PORT environment variable)
+      - "${HOST_PORT:-3005}:3000"
     volumes:
       # Persistent volume for SQLite database, images, and Odoo CSV exports
       - ./data:/app/data
