@@ -432,10 +432,72 @@ def record_not_found_code(impa_code: str, category_code: str, category_name: Opt
 
 def get_existing_codes_for_category(category_code: str, db_path: Path = DB_PATH) -> set:
     """
-    Returns set of already processed IMPA codes (including 'active' and 'not_found')
-    for a given category to skip duplicate network calls.
+    Returns set of already processed IMPA codes for a given category.
     """
     with get_connection(db_path) as conn:
         rows = conn.execute("SELECT impa_code FROM products WHERE category_code = ?", (category_code,)).fetchall()
-        return {r[0] for r in rows}
+        return {str(r[0]).zfill(6) for r in rows}
+
+def get_existing_products_for_category(category_code: str, db_path: Path = DB_PATH) -> Dict[str, bool]:
+    """
+    Returns dict of {impa_code: has_image}
+    - True: Product exists AND has an image.
+    - False: Product exists BUT image is NULL/empty.
+    """
+    with get_connection(db_path) as conn:
+        rows = conn.execute(
+            "SELECT impa_code, (image_url IS NOT NULL AND image_url != '') FROM products WHERE category_code = ?",
+            (category_code,)
+        ).fetchall()
+        return {str(r[0]).zfill(6): bool(r[1]) for r in rows}
+
+def update_product_image(impa_code: str, image_url: str, db_path: Path = DB_PATH) -> bool:
+    """
+    Updates the image_url for an existing product.
+    """
+    now = datetime.utcnow().isoformat()
+    with get_connection(db_path) as conn:
+        cur = conn.execute("""
+            UPDATE products 
+            SET image_url = ?, scraped_at = ?
+            WHERE impa_code = ?
+        """, (image_url, now, str(impa_code).zfill(6)))
+        conn.commit()
+        return cur.rowcount > 0
+
+def reset_entire_campaign_queue(db_path: Path = DB_PATH) -> None:
+    """
+    Resets category_queue status to 'pending' for all 34 categories,
+    resets today_count to 0 in scrape_campaigns, and sets current_category to '11'.
+    """
+    now = datetime.utcnow().isoformat()
+    with get_connection(db_path) as conn:
+        conn.execute("""
+            UPDATE category_queue
+            SET status = 'pending',
+                subcategories_done = 0,
+                items_found = 0
+        """)
+        conn.execute("""
+            UPDATE scrape_campaigns
+            SET status = 'running',
+                today_count = 0,
+                current_category = '11',
+                last_run_at = ?
+        """, (now,))
+        conn.commit()
+
+def reset_campaign_budget(db_path: Path = DB_PATH) -> None:
+    """
+    Resets today_count = 0 in scrape_campaigns and sets status = 'running'.
+    """
+    now = datetime.utcnow().isoformat()
+    with get_connection(db_path) as conn:
+        conn.execute("""
+            UPDATE scrape_campaigns
+            SET status = 'running',
+                today_count = 0,
+                last_run_at = ?
+        """, (now,))
+        conn.commit()
 

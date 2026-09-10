@@ -9,6 +9,7 @@ import {
   Play,
   Pause,
   RefreshCw,
+  RotateCcw,
   Layers,
   Sparkles,
   CheckCircle2,
@@ -118,6 +119,49 @@ export const CampaignSchedulerModal: React.FC<CampaignSchedulerModalProps> = ({
       fetchStatus();
     } catch (err: any) {
       setMessage(`❌ فشل الإيقاف: ${err.message}`);
+    } finally {
+      setIsTriggering(false);
+    }
+  };
+
+  const handleResetBudget = async () => {
+    setIsTriggering(true);
+    try {
+      const res = await fetch("/api/campaign", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "reset_budget" }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setMessage("✅ تم تصفير ميزانية اليوم بنجاح وفتح السحب فوراً!");
+        fetchStatus();
+        onDataUpdated();
+      }
+    } catch {
+      setMessage("❌ حدث خطأ أثناء تصفير الميزانية.");
+    } finally {
+      setIsTriggering(false);
+    }
+  };
+
+  const handleResetAll = async () => {
+    if (!confirm("هل أنت متأكد من إعادة ضبط الحملة بالكامل للبدء من الفئة 11 وتصفير الميزانية؟")) return;
+    setIsTriggering(true);
+    try {
+      const res = await fetch("/api/campaign", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "reset_all" }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setMessage("✅ تم تصفير الحملة بالكامل والبدء من الفئة 11!");
+        fetchStatus();
+        onDataUpdated();
+      }
+    } catch {
+      setMessage("❌ حدث خطأ أثناء إعادة ضبط الحملة.");
     } finally {
       setIsTriggering(false);
     }
@@ -335,6 +379,40 @@ export const CampaignSchedulerModal: React.FC<CampaignSchedulerModalProps> = ({
                   <span>بدء دفعة سحب آمنة</span>
                 </button>
               )}
+            </div>
+          </div>
+
+          {/* Budget & Reset Toolbar */}
+          <div className="flex flex-wrap items-center justify-between gap-3 p-3 rounded-xl bg-slate-950/80 border border-slate-800 text-xs">
+            <div className="flex items-center gap-2">
+              <span className="text-slate-400">سقف السحب اليومي:</span>
+              <span className="font-bold text-cyan-400 font-mono text-sm">{campaign?.today_count || 0} / {campaign?.daily_cap || 300}</span>
+              <span className="text-slate-500 text-[11px]">منتج</span>
+              {campaign && campaign.today_count >= campaign.daily_cap && (
+                <span className="px-2 py-0.5 rounded bg-rose-950/80 text-rose-400 border border-rose-800 text-[10px] font-bold">
+                  السقف مكتمل (متوقف مؤقتاً)
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleResetBudget}
+                disabled={isTriggering}
+                className="px-3 py-1.5 rounded-lg bg-cyan-950/80 hover:bg-cyan-900 border border-cyan-700 text-cyan-300 font-semibold flex items-center gap-1.5 transition-all cursor-pointer text-xs"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span>تصفير ميزانية اليوم فوراً</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleResetAll}
+                disabled={isTriggering}
+                className="px-3 py-1.5 rounded-lg bg-rose-950/60 hover:bg-rose-900/80 border border-rose-800 text-rose-300 font-semibold flex items-center gap-1.5 transition-all cursor-pointer text-xs"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+                <span>إعادة البدء من الفئة 11</span>
+              </button>
             </div>
           </div>
 

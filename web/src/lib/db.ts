@@ -364,16 +364,45 @@ export function updateCampaignConfig(data: Partial<import("./types").CampaignSta
 
   const status = data.status ?? current.status;
   const dailyCap = data.daily_cap ?? current.daily_cap;
+  const todayCount = data.today_count !== undefined ? data.today_count : current.today_count;
   const delayProfile = data.delay_profile ?? current.delay_profile;
   const currentCat = data.current_category ?? current.current_category;
   const now = new Date().toISOString();
 
   db.prepare(`
     UPDATE scrape_campaigns
-    SET status = ?, daily_cap = ?, delay_profile = ?, current_category = ?, last_run_at = ?
+    SET status = ?, daily_cap = ?, today_count = ?, delay_profile = ?, current_category = ?, last_run_at = ?
     WHERE id = ?
-  `).run(status, dailyCap, delayProfile, currentCat, now, current.id);
+  `).run(status, dailyCap, todayCount, delayProfile, currentCat, now, current.id);
 
+  return getCampaignStatus();
+}
+
+export function resetCampaignBudget(): import("./types").CampaignStatus {
+  const db = getDb();
+  const current = getCampaignStatus();
+  const now = new Date().toISOString();
+  db.prepare(`
+    UPDATE scrape_campaigns
+    SET today_count = 0, status = 'running', last_run_at = ?
+    WHERE id = ?
+  `).run(now, current.id);
+  return getCampaignStatus();
+}
+
+export function resetCampaignAll(): import("./types").CampaignStatus {
+  const db = getDb();
+  const current = getCampaignStatus();
+  const now = new Date().toISOString();
+  db.prepare(`
+    UPDATE category_queue
+    SET status = 'pending', subcategories_done = 0, items_found = 0
+  `).run();
+  db.prepare(`
+    UPDATE scrape_campaigns
+    SET today_count = 0, status = 'running', current_category = '11', last_run_at = ?
+    WHERE id = ?
+  `).run(now, current.id);
   return getCampaignStatus();
 }
 

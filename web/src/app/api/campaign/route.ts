@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getCampaignStatus, updateCampaignConfig, getCategoryQueue } from "@/lib/db";
+import { getCampaignStatus, updateCampaignConfig, getCategoryQueue, resetCampaignBudget, resetCampaignAll } from "@/lib/db";
 import { spawn } from "node:child_process";
 import path from "node:path";
 import fs from "node:fs";
@@ -33,6 +33,16 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const { action, daily_cap, delay_profile, current_category, limit } = body;
+
+    if (action === "reset_budget") {
+      const updated = resetCampaignBudget();
+      return NextResponse.json({ success: true, campaign: updated, message: "Daily budget counter reset to 0." });
+    }
+
+    if (action === "reset_all") {
+      const updated = resetCampaignAll();
+      return NextResponse.json({ success: true, campaign: updated, message: "Campaign reset. Starting from Category 11." });
+    }
 
     if (action === "pause") {
       const updated = updateCampaignConfig({ status: "paused" });

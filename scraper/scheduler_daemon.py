@@ -35,11 +35,14 @@ from db import (
     upsert_product,
     record_not_found_code,
     get_existing_codes_for_category,
+    get_existing_products_for_category,
     get_or_create_campaign,
     update_campaign,
     get_category_queue,
     upsert_category_queue_items,
     update_queue_category_progress,
+    reset_entire_campaign_queue,
+    reset_campaign_budget,
 )
 from shipserv_scraper import BASE_URL, IMAGE_CDN_BASE
 
@@ -168,12 +171,12 @@ class ImpaSchedulerDaemon:
         subcat_url: str,
         cat_code: str,
         cat_name: str,
-        existing_codes: Set[str],
+        existing_products: Any,
         profile: Dict[str, Any]
     ) -> int:
         """
         Fetches a subcategory page and extracts IMPAProduct items from __NEXT_DATA__ JSON.
-        Returns the count of newly scraped items.
+        Returns the count of newly scraped or enriched items.
         """
         self._sleep_jitter(profile)
 
@@ -216,8 +219,22 @@ class ImpaSchedulerDaemon:
 
             if entry.get("__typename") == "IMPAProduct" and entry.get("partNumber"):
                 part_num = str(entry.get("partNumber")).strip().zfill(6)
-                if part_num in existing_codes:
-                    continue  # Already extracted or logged
+                
+                # Check if item already exists and whether it already has an image
+                has_image = False
+                is_existing = False
+                if isinstance(existing_products, dict):
+                    if part_num in existing_products:
+                        is_existing = True
+                        has_image = existing_products[part_num]
+                elif isinstance(existing_products, set):
+                    if part_num in existing_products:
+                        is_existing = True
+                        has_image = True  # fallback if set was passed
+
+                # If the product already exists AND has a valid image, skip to save bandwidth & time
+                if is_existing and has_image:
+                    continue
 
                 name = (entry.get("name") or "").strip() or f"IMPA {part_num}"
                 desc = (entry.get("description") or "").strip() or f"IMPA {part_num} {name}"
@@ -246,9 +263,18 @@ class ImpaSchedulerDaemon:
                 }
 
                 upsert_product(record, self.db_path)
-                existing_codes.add(part_num)
+                
+                if is_existing and not has_image and image_url:
+                    logger.info(f"🖼️ [Image Enriched] IMPA [{part_num}]: {name[:30]} -> {pic_file}")
+                else:
+                    logger.info(f"✅ [Scraped] IMPA [{part_num}]: {name[:30]} [{uom}]")
+
+                if isinstance(existing_products, dict):
+                    existing_products[part_num] = bool(image_url)
+                elif isinstance(existing_products, set):
+                    existing_products.add(part_num)
+
                 scraped_count += 1
-                logger.info(f"✅ IMPA [{part_num}]: {name[:35]} [{uom}]")
 
         return scraped_count
 
@@ -277,12 +303,19 @@ class ImpaSchedulerDaemon:
         if status == "paused":
             time.sleep(5)
             return
-
-        # 3. Check if Daily Cap was reached
-        if today_count >= daily_cap:
-            logger.info(f"🛑 Daily budget cap reached ({today_count}/{daily_cap} items). Sleeping for 60s...")
-            time.sleep(60)
-            return
+        # 3. Check if Daily Cap was reached (with automated 24h day rollover)
+        if daily_cap > 0 and today_count >= daily_cap:
+            last_run = campaign.get("last_run_at", "") or ""
+            last_date = last_run[:10] if len(last_run) >= 10 else ""
+            current_date = datetime.utcnow().strftime("%Y-%m-%d")
+            if last_date and current_date != last_date:
+                logger.info(f"🌅 New day detected ({current_date} != {last_date})! Auto-resetting daily budget cap (0/{daily_cap}).")
+                update_campaign({"today_count": 0, "last_run_at": datetime.utcnow().isoformat()}, db_path=self.db_path)
+                today_count = 0
+            else:
+                logger.info(f"🛑 Daily budget cap reached ({today_count}/{daily_cap} items). Sleeping for 60s...")
+                time.sleep(60)
+                return
 
         # 4. Pick next target category from queue
         queue = self.ensure_queue_populated()
@@ -306,8 +339,8 @@ class ImpaSchedulerDaemon:
         logger.info(f"🚀 Processing Category [{cat_code}] {cat_name} (Status: {target_cat['status']})")
         update_campaign({"status": "running", "current_category": cat_code}, db_path=self.db_path)
 
-        # Load existing codes to skip duplicates
-        existing_codes = get_existing_codes_for_category(cat_code, self.db_path)
+        # Load existing products to enrich missing images and skip already complete items
+        existing_products = get_existing_products_for_category(cat_code, self.db_path)
 
         # Discover subcategories
         cat_url = f"{BASE_URL}/{cat_slug}"
@@ -320,20 +353,27 @@ class ImpaSchedulerDaemon:
                 return
             if resp.status_code == 200:
                 soup = BeautifulSoup(resp.text, "html.parser")
-                prefix = f"/{cat_slug}/"
-                subcat_links = list(set([
-                    a["href"] for a in soup.find_all("a", href=True)
-                    if a["href"].startswith(prefix)
-                ]))
+                for a in soup.find_all("a", href=True):
+                    href = a["href"]
+                    if href.startswith(f"/{cat_slug}/") and href.count("/") >= 3:
+                        if href not in subcat_links:
+                            subcat_links.append(href)
         except Exception as e:
-            logger.error(f"Error fetching category index {cat_url}: {e}")
+            logger.error(f"Error discovering subcategories for {cat_url}: {e}")
 
         total_subs = len(subcat_links)
+        if total_subs == 0:
+            logger.warning(f"No subcategory links discovered for [{cat_code}] {cat_name}. Marking completed.")
+            update_queue_category_progress(cat_code, 0, 0, 0, "completed", self.db_path)
+            return
+
         done_subs = target_cat.get("subcategories_done", 0)
         items_scraped_stage = 0
 
+        # Process each subcategory
         for sub_index, subcat_path in enumerate(subcat_links):
             if not self.running:
+                logger.info("Termination signal received. Exiting stage loop.")
                 break
 
             if sub_index < done_subs:
@@ -344,7 +384,7 @@ class ImpaSchedulerDaemon:
             if fresh_campaign.get("status") == "paused":
                 logger.info("Campaign paused by user. Breaking stage.")
                 break
-            if fresh_campaign.get("today_count", 0) >= daily_cap:
+            if daily_cap > 0 and fresh_campaign.get("today_count", 0) >= daily_cap:
                 logger.info("Daily cap reached mid-category. Pausing stage.")
                 break
 
@@ -352,7 +392,7 @@ class ImpaSchedulerDaemon:
             logger.info(f"Inspecting subcategory ({sub_index + 1}/{total_subs}): {subcat_path.split('/')[-1]}")
 
             new_items = self.process_subcategory_page(
-                sub_url, cat_code, cat_name, existing_codes, profile
+                sub_url, cat_code, cat_name, existing_products, profile
             )
 
             # Check if circuit breaker triggered
@@ -399,5 +439,38 @@ class ImpaSchedulerDaemon:
         logger.info("🛑 IMPA Scraper Worker Daemon cleanly stopped. Good day!")
 
 if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser(description="IMPA Stateful Scraper Worker Daemon")
+    parser.add_argument("--reset-budget", action="store_true", help="Reset today_count to 0 and resume immediately")
+    parser.add_argument("--reset-queue", action="store_true", help="Reset category queue status to pending (start from Cat 11)")
+    parser.add_argument("--reset-all", action="store_true", help="Reset budget and queue to start completely from the beginning")
+    parser.add_argument("--cap", type=int, default=None, help="Update daily budget cap (0 for unlimited)")
+    parser.add_argument("--status", action="store_true", help="Show current campaign status and progress")
+    args = parser.parse_args()
+
+    if args.status:
+        camp = get_or_create_campaign()
+        queue = get_category_queue()
+        done = sum(1 for c in queue if c["status"] == "completed")
+        print(f"Campaign Status: {camp.get('status')}")
+        print(f"Daily Budget: {camp.get('today_count')}/{camp.get('daily_cap')}")
+        print(f"Category Progress: {done}/{len(queue)} categories completed")
+        sys.exit(0)
+
+    if args.reset_budget:
+        reset_campaign_budget()
+        print("✅ Daily budget counter reset to 0. Campaign resumed.")
+        sys.exit(0)
+
+    if args.reset_queue or args.reset_all:
+        reset_entire_campaign_queue()
+        print("✅ Campaign queue and budget reset to 0. Starting from Category 11.")
+        sys.exit(0)
+
+    if args.cap is not None:
+        update_campaign({"daily_cap": args.cap})
+        print(f"✅ Daily budget cap updated to {args.cap}.")
+        sys.exit(0)
+
     daemon = ImpaSchedulerDaemon()
     daemon.start()
