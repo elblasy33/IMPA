@@ -1,0 +1,14 @@
+node_modules
+web/node_modules
+web/.next
+web/out
+.git
+.gitignore
+*.log
+*.sqlite-journal
+*.db-wal
+*.db-shm
+data/exports/*
+data/images/*
+scratch
+.DS_Store
