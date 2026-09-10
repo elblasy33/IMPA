@@ -98,8 +98,8 @@ def dry_run_test_category(category_slug: str = "11-welfare-items"):
                 continue
 
             clean_code = str(part_number).strip().zfill(6)
-            name = val.get("name", "").strip()
-            desc = val.get("description", "").strip()
+            name = (val.get("name") or "").strip() or f"IMPA {clean_code}"
+            desc = (val.get("description") or "").strip()
             uom = (val.get("unitOfMeasure") or "PCS").strip().upper()
             pic_file = val.get("pictureFileName")
             image_url = f"{IMAGE_CDN_BASE}{pic_file}" if pic_file else None

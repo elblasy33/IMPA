@@ -97,17 +97,22 @@ def init_db(db_path: Path = DB_PATH) -> None:
             pass
         conn.commit()
 
-def calculate_quality_score(name: str, desc: str, uom: str, img: Optional[str]) -> int:
+def calculate_quality_score(name: Optional[str], desc: Optional[str], uom: Optional[str], img: Optional[str]) -> int:
     score = 0
-    if name and len(name.strip()) > 3:
+    clean_name = (name or "").strip()
+    clean_desc = (desc or "").strip()
+    clean_uom = (uom or "").strip()
+    clean_img = (img or "").strip()
+
+    if clean_name and len(clean_name) > 3:
         score += 30
-    if desc and len(desc.strip()) > 25:
+    if clean_desc and len(clean_desc) > 25:
         score += 30
-    elif desc and len(desc.strip()) > 5:
+    elif clean_desc and len(clean_desc) > 5:
         score += 15
-    if uom and len(uom.strip()) >= 2:
+    if clean_uom and len(clean_uom) >= 2:
         score += 20
-    if img and len(img.strip()) > 10:
+    if clean_img and len(clean_img) > 10:
         score += 20
     return min(100, max(0, score))
 
@@ -120,8 +125,8 @@ def upsert_product(product: Dict[str, Any], db_path: Path = DB_PATH) -> bool:
     
     scraped_at = product.get("scraped_at") or datetime.utcnow().isoformat()
     uom = (product.get("uom") or "PCS").upper()
-    name = product["product_name"].strip()
-    desc = product.get("description", "").strip()
+    name = (product.get("product_name") or f"IMPA {product['impa_code']}").strip()
+    desc = (product.get("description") or "").strip()
     img = product.get("image_url")
     
     quality_score = calculate_quality_score(name, desc, uom, img)
@@ -177,8 +182,8 @@ def upsert_batch(products: List[Dict[str, Any]], db_path: Path = DB_PATH) -> int
         for p in products:
             cat_code = p.get("category_code") or str(p["impa_code"])[:2]
             cat_name = p.get("category_name") or IMPA_CATEGORIES.get(cat_code, "Marine Equipment")
-            name = p["product_name"].strip()
-            desc = p.get("description", "").strip()
+            name = (p.get("product_name") or f"IMPA {p['impa_code']}").strip()
+            desc = (p.get("description") or "").strip()
             uom = (p.get("uom") or "PCS").upper()
             img = p.get("image_url")
             q_score = calculate_quality_score(name, desc, uom, img)

@@ -133,7 +133,7 @@ class ImpaSchedulerDaemon:
                         )
                         for c in categories:
                             cat_num = str(c.get("categoryNumber", "")).strip().zfill(2)
-                            cat_name = c.get("name", "").strip()
+                            cat_name = (c.get("name") or "").strip()
                             slug = c.get("urlSlug") or f"{cat_num}-{cat_name.lower().replace(' ', '-')}"
                             items.append({
                                 "code": cat_num,
@@ -219,8 +219,8 @@ class ImpaSchedulerDaemon:
                 if part_num in existing_codes:
                     continue  # Already extracted or logged
 
-                name = entry.get("name", "").strip()
-                desc = entry.get("description", "").strip() or f"IMPA {part_num} {name}"
+                name = (entry.get("name") or "").strip() or f"IMPA {part_num}"
+                desc = (entry.get("description") or "").strip() or f"IMPA {part_num} {name}"
                 uom = (entry.get("unitOfMeasure") or "PCS").strip().upper()
                 pic_file = entry.get("pictureFileName")
                 image_url = f"{IMAGE_CDN_BASE}{pic_file}" if pic_file else None

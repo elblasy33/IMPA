@@ -137,8 +137,8 @@ class ShipServImpaScraper:
                 for v in sapollo.values():
                     if v.get("__typename") == "IMPAProduct" and v.get("partNumber"):
                         part_num = str(v.get("partNumber")).strip().zfill(6)
-                        name = v.get("name", "").strip()
-                        desc = v.get("description", "").strip() or f"IMPA {part_num} {name}"
+                        name = (v.get("name") or "").strip() or f"IMPA {part_num}"
+                        desc = (v.get("description") or "").strip() or f"IMPA {part_num} {name}"
                         uom = (v.get("unitOfMeasure") or "PCS").strip().upper()
                         
                         pic_file = v.get("pictureFileName")
