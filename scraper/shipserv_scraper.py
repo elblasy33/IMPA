@@ -142,7 +142,11 @@ class ShipServImpaScraper:
                         uom = (v.get("unitOfMeasure") or "PCS").strip().upper()
                         
                         pic_file = v.get("pictureFileName")
-                        image_url = f"{IMAGE_CDN_BASE}{pic_file}" if pic_file else None
+                        strict_mode = os.environ.get("STRICT_IMAGE_MATCH", "false").lower() in ("true", "1", "yes")
+                        if pic_file and strict_mode and not str(pic_file).startswith(part_num):
+                            image_url = None
+                        else:
+                            image_url = f"{IMAGE_CDN_BASE}{pic_file}" if pic_file else None
                         slug = v.get("urlSlug")
                         source_url = f"{BASE_URL}/{slug}" if slug else sub_url
 

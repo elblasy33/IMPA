@@ -2,6 +2,7 @@
 
 import React from "react";
 import { Search, X, LayoutGrid, List, SlidersHorizontal, RotateCcw } from "lucide-react";
+import { ReviewStatusFilter } from "@/lib/types";
 
 export const IMPA_CATEGORIES_LIST = [
   { code: "all", name: "All Categories (11 - 89)" },
@@ -61,8 +62,8 @@ interface SearchAndFiltersProps {
   onCategoryChange: (cat: string) => void;
   selectedUom: string;
   onUomChange: (uom: string) => void;
-  reviewStatus: "all" | "active" | "verified" | "needs_review" | "missing_images" | "not_found";
-  onReviewStatusChange: (status: "all" | "active" | "verified" | "needs_review" | "missing_images" | "not_found") => void;
+  reviewStatus: ReviewStatusFilter;
+  onReviewStatusChange: (status: ReviewStatusFilter) => void;
   viewMode: "table" | "grid";
   onViewModeChange: (mode: "table" | "grid") => void;
   onReset: () => void;
@@ -204,14 +205,36 @@ export const SearchAndFilters: React.FC<SearchAndFiltersProps> = ({
               المعتمدة (Verified)
             </button>
             <button
-              onClick={() => onReviewStatusChange("missing_images")}
+              onClick={() => onReviewStatusChange("direct_images")}
               className={`px-2 py-1 rounded-md transition-all ${
-                reviewStatus === "missing_images"
+                reviewStatus === "direct_images"
+                  ? "bg-teal-600 text-white font-bold shadow-sm"
+                  : "text-slate-400 hover:text-white"
+              }`}
+              title="المنتجات التي لها صورة مطابقة لكود IMPA الخاص بها مباشرة"
+            >
+              صور مباشرة (Direct)
+            </button>
+            <button
+              onClick={() => onReviewStatusChange("family_images")}
+              className={`px-2 py-1 rounded-md transition-all ${
+                reviewStatus === "family_images"
                   ? "bg-amber-600 text-white font-bold shadow-sm"
                   : "text-slate-400 hover:text-white"
               }`}
+              title="المنتجات التي تتبع صورة تمثيلية للمجموعة في ShipServ"
             >
-              صور مفقودة
+              صور مجموعات (Family)
+            </button>
+            <button
+              onClick={() => onReviewStatusChange("missing_images")}
+              className={`px-2 py-1 rounded-md transition-all ${
+                reviewStatus === "missing_images"
+                  ? "bg-slate-600 text-white font-bold shadow-sm"
+                  : "text-slate-400 hover:text-white"
+              }`}
+            >
+              بدون صور
             </button>
             <button
               onClick={() => onReviewStatusChange("needs_review")}

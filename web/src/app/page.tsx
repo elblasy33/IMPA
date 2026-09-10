@@ -10,7 +10,7 @@ import { ProductGrid } from "@/components/ProductGrid";
 import { ProductModal } from "@/components/ProductModal";
 import { ScraperControlModal } from "@/components/ScraperControlModal";
 import { CampaignSchedulerModal } from "@/components/CampaignSchedulerModal";
-import { ImpaProduct, DashboardStats, CampaignStatus } from "@/lib/types";
+import { ImpaProduct, DashboardStats, CampaignStatus, ReviewStatusFilter } from "@/lib/types";
 
 export default function Home() {
   // State
@@ -28,7 +28,7 @@ export default function Home() {
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [selectedUom, setSelectedUom] = useState("all");
-  const [reviewStatus, setReviewStatus] = useState<"all" | "active" | "verified" | "needs_review" | "missing_images" | "not_found">("all");
+  const [reviewStatus, setReviewStatus] = useState<ReviewStatusFilter>("all");
   const [viewMode, setViewMode] = useState<"table" | "grid">("table");
 
   // Modals state

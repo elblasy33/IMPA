@@ -153,6 +153,10 @@ export function getProducts(params: ProductsQueryParams = {}): ProductsResponse 
   // Filter by Data Quality / Review Status
   if (params.reviewStatus === "verified") {
     conditions.push("(review_status = 'verified' OR status = 'verified' OR status = 'shipserv_verified')");
+  } else if (params.reviewStatus === "direct_images") {
+    conditions.push("image_url IS NOT NULL AND image_url != '' AND INSTR(image_url, impa_code) > 0 AND status != 'not_found'");
+  } else if (params.reviewStatus === "family_images") {
+    conditions.push("image_url IS NOT NULL AND image_url != '' AND INSTR(image_url, impa_code) = 0 AND status != 'not_found'");
   } else if (params.reviewStatus === "missing_images") {
     conditions.push("(image_url IS NULL OR image_url = '') AND status != 'not_found'");
   } else if (params.reviewStatus === "needs_review") {

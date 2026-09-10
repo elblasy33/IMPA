@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { Package, ChevronLeft, ChevronRight, Eye } from "lucide-react";
+import { Package, ChevronLeft, ChevronRight, Eye, Layers } from "lucide-react";
 import { ImpaProduct } from "@/lib/types";
 
 interface ProductGridProps {
@@ -56,16 +56,27 @@ export const ProductGrid: React.FC<ProductGridProps> = ({
               {/* Product Image Banner */}
               <div className="relative aspect-video w-full bg-slate-800 overflow-hidden flex items-center justify-center">
                 {product.image_url ? (
-                  /* eslint-disable-next-line @next/next/no-img-element */
-                  <img
-                    src={product.image_url}
-                    alt={product.product_name}
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                    onError={(e) => {
-                      (e.target as HTMLImageElement).src =
-                        "https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?w=600&auto=format&fit=crop&q=80";
-                    }}
-                  />
+                  <>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={product.image_url}
+                      alt={product.product_name}
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                      onError={(e) => {
+                        const target = e.currentTarget;
+                        target.style.display = "none";
+                        const fallback = target.nextElementSibling as HTMLElement;
+                        if (fallback) fallback.style.display = "flex";
+                      }}
+                    />
+                    <div
+                      style={{ display: "none" }}
+                      className="w-full h-full flex-col items-center justify-center text-slate-500"
+                    >
+                      <Package className="w-8 h-8 mb-1" />
+                      <span className="text-[10px]">No image</span>
+                    </div>
+                  </>
                 ) : (
                   <div className="flex flex-col items-center justify-center text-slate-500">
                     <Package className="w-8 h-8 mb-1" />
@@ -79,6 +90,19 @@ export const ProductGrid: React.FC<ProductGridProps> = ({
                     {product.impa_code}
                   </span>
                 </div>
+
+                {/* Group/Family Photo badge if applicable */}
+                {product.image_url && !product.image_url.includes(product.impa_code) && (
+                  <div className="absolute bottom-2 left-2.5">
+                    <span
+                      title="صورة تمثيلية للمجموعة من ShipServ (IMPA Family Image)"
+                      className="px-2 py-0.5 rounded-md bg-amber-950/90 text-amber-300 border border-amber-600/70 text-[10px] font-semibold shadow-md backdrop-blur-sm flex items-center gap-1"
+                    >
+                      <Layers className="w-3 h-3 text-amber-400" />
+                      Family Photo
+                    </span>
+                  </div>
+                )}
 
                 {/* UOM badge on image */}
                 <div className="absolute top-2.5 right-2.5">

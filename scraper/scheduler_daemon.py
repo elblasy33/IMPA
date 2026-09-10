@@ -223,7 +223,13 @@ class ImpaSchedulerDaemon:
                 desc = (entry.get("description") or "").strip() or f"IMPA {part_num} {name}"
                 uom = (entry.get("unitOfMeasure") or "PCS").strip().upper()
                 pic_file = entry.get("pictureFileName")
-                image_url = f"{IMAGE_CDN_BASE}{pic_file}" if pic_file else None
+                # In ShipServ / IMPA catalog, subcategory variants share the family's representative image.
+                # If STRICT_IMAGE_MATCH is enabled, only the lead product matching the filename gets the image URL.
+                strict_mode = os.environ.get("STRICT_IMAGE_MATCH", "false").lower() in ("true", "1", "yes")
+                if pic_file and strict_mode and not str(pic_file).startswith(part_num):
+                    image_url = None
+                else:
+                    image_url = f"{IMAGE_CDN_BASE}{pic_file}" if pic_file else None
                 slug = entry.get("urlSlug")
                 source_url = f"{BASE_URL}/{slug}" if slug else subcat_url
 

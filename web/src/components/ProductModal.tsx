@@ -14,7 +14,8 @@ import {
   Trash2,
   Save,
   Undo2,
-  AlertCircle
+  AlertCircle,
+  Layers
 } from "lucide-react";
 import { ImpaProduct } from "@/lib/types";
 
@@ -282,22 +283,52 @@ export const ProductModal: React.FC<ProductModalProps> = ({
                 {/* Product Image */}
                 <div className="relative aspect-square rounded-xl bg-slate-800/80 border border-slate-700/80 overflow-hidden flex items-center justify-center group">
                   {product.image_url ? (
-                    /* eslint-disable-next-line @next/next/no-img-element */
-                    <img
-                      src={product.image_url}
-                      alt={product.product_name}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                      onError={(e) => {
-                        (e.target as HTMLImageElement).src =
-                          "https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?w=600&auto=format&fit=crop&q=80";
-                      }}
-                    />
+                    <>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={product.image_url}
+                        alt={product.product_name}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                        onError={(e) => {
+                          const target = e.currentTarget;
+                          target.style.display = "none";
+                          const fallback = target.nextElementSibling as HTMLElement;
+                          if (fallback) fallback.style.display = "flex";
+                        }}
+                      />
+                      <div
+                        style={{ display: "none" }}
+                        className="flex-col items-center justify-center text-slate-500 p-6 text-center"
+                      >
+                        <Package className="w-12 h-12 mb-2 text-slate-600" />
+                        <span className="text-xs">Image unavailable</span>
+                      </div>
+                    </>
                   ) : (
                     <div className="flex flex-col items-center justify-center text-slate-500 p-6 text-center">
                       <Package className="w-12 h-12 mb-2 text-slate-600" />
                       <span className="text-xs">No direct image URL captured</span>
                     </div>
                   )}
+
+                  {/* Image Context Tag */}
+                  {product.image_url && !product.image_url.includes(product.impa_code) ? (
+                    <div className="absolute bottom-2.5 left-2.5 right-2.5 bg-slate-950/90 border border-amber-500/50 rounded-lg px-3 py-1.5 backdrop-blur-md text-center shadow-lg">
+                      <span className="text-xs text-amber-300 font-semibold flex items-center justify-center gap-1.5">
+                        <Layers className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" />
+                        صورة تمثيلية للمجموعة (ShipServ Group Photo)
+                      </span>
+                      <span className="text-[10px] text-slate-400 block mt-0.5">
+                        Official IMPA catalogue family image for this item group
+                      </span>
+                    </div>
+                  ) : product.image_url ? (
+                    <div className="absolute bottom-2.5 left-2.5 right-2.5 bg-slate-950/90 border border-emerald-500/50 rounded-lg px-3 py-1.5 backdrop-blur-md text-center shadow-lg">
+                      <span className="text-xs text-emerald-300 font-semibold">
+                        صورة المنتج الأصلية المطابقة لكود IMPA
+                      </span>
+                    </div>
+                  ) : null}
                 </div>
 
                 {/* Product Core Specs */}

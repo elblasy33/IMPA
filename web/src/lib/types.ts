@@ -26,11 +26,21 @@ export interface DashboardStats {
   }[];
 }
 
+export type ReviewStatusFilter =
+  | "all"
+  | "active"
+  | "verified"
+  | "needs_review"
+  | "missing_images"
+  | "not_found"
+  | "direct_images"
+  | "family_images";
+
 export interface ProductsQueryParams {
   query?: string;
   category?: string;
   uom?: string;
-  reviewStatus?: "all" | "active" | "verified" | "needs_review" | "missing_images" | "not_found";
+  reviewStatus?: ReviewStatusFilter;
   page?: number;
   limit?: number;
   sortBy?: "impa_code" | "product_name" | "scraped_at";

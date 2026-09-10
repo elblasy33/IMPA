@@ -103,6 +103,7 @@ def dry_run_test_category(category_slug: str = "11-welfare-items"):
             uom = (val.get("unitOfMeasure") or "PCS").strip().upper()
             pic_file = val.get("pictureFileName")
             image_url = f"{IMAGE_CDN_BASE}{pic_file}" if pic_file else None
+            image_type = "direct_match" if (pic_file and str(pic_file).startswith(clean_code)) else ("family_group_photo" if pic_file else "none")
             slug = val.get("urlSlug")
             source_url = f"{BASE_URL}/{slug}" if slug else subcat_url
 
@@ -112,6 +113,7 @@ def dry_run_test_category(category_slug: str = "11-welfare-items"):
                 "description": desc,
                 "uom": uom,
                 "image_url": image_url,
+                "image_type": image_type,
                 "source_url": source_url,
                 "raw_apollo_key": key
             })

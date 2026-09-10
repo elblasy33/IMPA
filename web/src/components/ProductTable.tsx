@@ -68,20 +68,38 @@ export const ProductTable: React.FC<ProductTableProps> = ({
               >
                 {/* Thumbnail */}
                 <td className="px-5 py-3.5">
-                  <div className="w-12 h-12 rounded-lg bg-slate-800 border border-slate-700 overflow-hidden flex items-center justify-center flex-shrink-0">
+                  <div className="relative w-12 h-12 rounded-lg bg-slate-800 border border-slate-700 overflow-hidden flex items-center justify-center flex-shrink-0">
                     {product.image_url ? (
-                      /* eslint-disable-next-line @next/next/no-img-element */
-                      <img
-                        src={product.image_url}
-                        alt={product.product_name}
-                        className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
-                        onError={(e) => {
-                          (e.target as HTMLImageElement).src =
-                            "https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?w=600&auto=format&fit=crop&q=80";
-                        }}
-                      />
+                      <>
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={product.image_url}
+                          alt={product.product_name}
+                          className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
+                          onError={(e) => {
+                            const target = e.currentTarget;
+                            target.style.display = "none";
+                            const fallback = target.nextElementSibling as HTMLElement;
+                            if (fallback) fallback.style.display = "flex";
+                          }}
+                        />
+                        <div
+                          style={{ display: "none" }}
+                          className="w-full h-full items-center justify-center text-slate-500"
+                        >
+                          <Package className="w-5 h-5 text-slate-500" />
+                        </div>
+                      </>
                     ) : (
                       <Package className="w-5 h-5 text-slate-500" />
+                    )}
+                    {product.image_url && !product.image_url.includes(product.impa_code) && (
+                      <span
+                        title="صورة تمثيلية للمجموعة من ShipServ (IMPA Family Image)"
+                        className="absolute bottom-0 right-0 px-1 py-0.5 bg-amber-500/30 text-amber-300 border-t border-l border-amber-500/50 text-[8px] font-bold rounded-tl leading-none backdrop-blur-sm"
+                      >
+                        GRP
+                      </span>
                     )}
                   </div>
                 </td>
