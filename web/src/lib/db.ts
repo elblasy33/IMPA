@@ -6,6 +6,18 @@ import { ImpaProduct, DashboardStats, ProductsQueryParams, ProductsResponse } fr
 let dbInstance: DatabaseSync | null = null;
 
 export function getDbPath(): string {
+  // Check environment variable first (from Docker or host)
+  if (process.env.IMPA_DB_PATH) {
+    const customPath = process.env.IMPA_DB_PATH;
+    const dir = path.dirname(customPath);
+    if (!fs.existsSync(dir)) {
+      try {
+        fs.mkdirSync(dir, { recursive: true });
+      } catch {}
+    }
+    return customPath;
+  }
+
   // Check static relative paths
   const parentDb = path.join(process.cwd(), "..", "data", "impa_catalog.db");
   if (fs.existsSync(parentDb)) {
@@ -29,12 +41,82 @@ export function getDbPath(): string {
 export function getDb(): DatabaseSync {
   if (!dbInstance) {
     const dbPath = getDbPath();
+    const dir = path.dirname(dbPath);
+    if (!fs.existsSync(dir)) {
+      try {
+        fs.mkdirSync(dir, { recursive: true });
+      } catch {}
+    }
+
     dbInstance = new DatabaseSync(dbPath);
     try {
       dbInstance.exec("PRAGMA journal_mode = WAL;");
       dbInstance.exec("PRAGMA busy_timeout = 5000;");
-    } catch {
-      // Pragmas applied
+
+      // 1. Ensure products table exists
+      dbInstance.exec(`
+        CREATE TABLE IF NOT EXISTS products (
+          impa_code TEXT PRIMARY KEY,
+          category_code TEXT NOT NULL,
+          category_name TEXT NOT NULL,
+          product_name TEXT NOT NULL,
+          description TEXT,
+          uom TEXT DEFAULT 'PCS',
+          image_url TEXT,
+          local_image_path TEXT,
+          source_url TEXT,
+          scraped_at TEXT NOT NULL,
+          status TEXT DEFAULT 'active',
+          quality_score INTEGER DEFAULT 80,
+          review_status TEXT DEFAULT 'auto_scraped'
+        );
+        CREATE INDEX IF NOT EXISTS idx_products_category ON products(category_code);
+        CREATE INDEX IF NOT EXISTS idx_products_name ON products(product_name);
+        CREATE INDEX IF NOT EXISTS idx_products_uom ON products(uom);
+        CREATE INDEX IF NOT EXISTS idx_products_status ON products(status);
+        CREATE INDEX IF NOT EXISTS idx_products_review ON products(review_status);
+      `);
+
+      // 2. Safe Dynamic Migrations: Auto-migrate any existing databases missing new columns
+      const tableInfo = dbInstance.prepare("PRAGMA table_info(products);").all() as any[];
+      const existingCols = new Set(tableInfo.map((col: any) => col.name));
+
+      if (!existingCols.has("quality_score")) {
+        dbInstance.exec("ALTER TABLE products ADD COLUMN quality_score INTEGER DEFAULT 80;");
+      }
+      if (!existingCols.has("review_status")) {
+        dbInstance.exec("ALTER TABLE products ADD COLUMN review_status TEXT DEFAULT 'auto_scraped';");
+      }
+      if (!existingCols.has("status")) {
+        dbInstance.exec("ALTER TABLE products ADD COLUMN status TEXT DEFAULT 'active';");
+      }
+
+      // 3. Ensure campaigns and queue tables exist
+      dbInstance.exec(`
+        CREATE TABLE IF NOT EXISTS scrape_campaigns (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          name TEXT NOT NULL,
+          status TEXT DEFAULT 'idle',
+          daily_cap INTEGER DEFAULT 300,
+          today_count INTEGER DEFAULT 0,
+          delay_profile TEXT DEFAULT 'stealth',
+          current_category TEXT,
+          last_run_at TEXT,
+          created_at TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS category_queue (
+          category_code TEXT PRIMARY KEY,
+          category_name TEXT NOT NULL,
+          slug TEXT NOT NULL,
+          subcategories_total INTEGER DEFAULT 0,
+          subcategories_done INTEGER DEFAULT 0,
+          items_found INTEGER DEFAULT 0,
+          status TEXT DEFAULT 'pending',
+          last_scraped_at TEXT
+        );
+      `);
+    } catch (err) {
+      console.error("Database migration error in getDb():", err);
     }
   }
   return dbInstance;
