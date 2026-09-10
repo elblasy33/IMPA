@@ -72,9 +72,16 @@ export function getProducts(params: ProductsQueryParams = {}): ProductsResponse 
   if (params.reviewStatus === "verified") {
     conditions.push("(review_status = 'verified' OR status = 'verified' OR status = 'shipserv_verified')");
   } else if (params.reviewStatus === "missing_images") {
-    conditions.push("(image_url IS NULL OR image_url = '')");
+    conditions.push("(image_url IS NULL OR image_url = '') AND status != 'not_found'");
   } else if (params.reviewStatus === "needs_review") {
-    conditions.push("(review_status = 'flagged' OR image_url IS NULL OR image_url = '' OR LENGTH(COALESCE(description, '')) < 30)");
+    conditions.push("(review_status = 'flagged' OR image_url IS NULL OR image_url = '' OR LENGTH(COALESCE(description, '')) < 30) AND status != 'not_found'");
+  } else if (params.reviewStatus === "active") {
+    conditions.push("status IN ('active', 'verified', 'shipserv_verified')");
+  } else if (params.reviewStatus === "not_found") {
+    conditions.push("status = 'not_found'");
+  } else {
+    // Default: exclude 404 sequence gaps unless specifically requested
+    conditions.push("status != 'not_found'");
   }
 
   const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
@@ -134,14 +141,15 @@ export function getProductByCode(impaCode: string): ImpaProduct | null {
 export function getDashboardStats(): DashboardStats {
   const db = getDb();
   
-  const totalRow = db.prepare("SELECT COUNT(*) as count FROM products").get() as { count: number } | undefined;
-  const catRow = db.prepare("SELECT COUNT(DISTINCT category_code) as count FROM products").get() as { count: number } | undefined;
-  const uomRow = db.prepare("SELECT COUNT(DISTINCT uom) as count FROM products").get() as { count: number } | undefined;
-  const imgRow = db.prepare("SELECT COUNT(*) as count FROM products WHERE image_url IS NOT NULL OR local_image_path IS NOT NULL").get() as { count: number } | undefined;
+  const totalRow = db.prepare("SELECT COUNT(*) as count FROM products WHERE status != 'not_found'").get() as { count: number } | undefined;
+  const catRow = db.prepare("SELECT COUNT(DISTINCT category_code) as count FROM products WHERE status != 'not_found'").get() as { count: number } | undefined;
+  const uomRow = db.prepare("SELECT COUNT(DISTINCT uom) as count FROM products WHERE status != 'not_found'").get() as { count: number } | undefined;
+  const imgRow = db.prepare("SELECT COUNT(*) as count FROM products WHERE (image_url IS NOT NULL OR local_image_path IS NOT NULL) AND status != 'not_found'").get() as { count: number } | undefined;
 
   const breakdownRows = db.prepare(`
     SELECT category_code, category_name, COUNT(*) as count
     FROM products
+    WHERE status != 'not_found'
     GROUP BY category_code, category_name
     ORDER BY count DESC
   `).all() as unknown as { category_code: string; category_name: string; count: number }[];
@@ -157,7 +165,7 @@ export function getDashboardStats(): DashboardStats {
 
 export function getAllProducts(): ImpaProduct[] {
   const db = getDb();
-  const rows = db.prepare("SELECT * FROM products ORDER BY impa_code ASC").all() as unknown as ImpaProduct[];
+  const rows = db.prepare("SELECT * FROM products WHERE status != 'not_found' AND status != 'failed' ORDER BY impa_code ASC").all() as unknown as ImpaProduct[];
   return rows;
 }
 

@@ -404,3 +404,33 @@ def get_quality_audit(db_path: Path = DB_PATH) -> Dict[str, Any]:
             "average_quality_score": avg_score,
             "high_quality_percentage": round((verified / total * 100)) if total > 0 else 0
         }
+
+def record_not_found_code(impa_code: str, category_code: str, category_name: Optional[str] = None, db_path: Path = DB_PATH) -> None:
+    """
+    CRITICAL: If a scraped IMPA code returns HTTP 404, it MUST be saved in the `products`
+    table with status 'not_found' so the scraper never tries it again (bypassing sequence gaps).
+    """
+    cat_code = category_code or str(impa_code)[:2]
+    cat_name = category_name or IMPA_CATEGORIES.get(cat_code, "Marine Equipment")
+    now = datetime.utcnow().isoformat()
+    with get_connection(db_path) as conn:
+        conn.execute("""
+            INSERT INTO products (
+                impa_code, category_code, category_name, product_name,
+                description, uom, status, quality_score, review_status, scraped_at
+            ) VALUES (?, ?, ?, '[NOT FOUND - SEQUENCE GAP]', '', 'PCS', 'not_found', 0, 'auto_scraped', ?)
+            ON CONFLICT(impa_code) DO UPDATE SET
+                status = excluded.status,
+                scraped_at = excluded.scraped_at
+        """, (str(impa_code).zfill(6), cat_code, cat_name, now))
+        conn.commit()
+
+def get_existing_codes_for_category(category_code: str, db_path: Path = DB_PATH) -> set:
+    """
+    Returns set of already processed IMPA codes (including 'active' and 'not_found')
+    for a given category to skip duplicate network calls.
+    """
+    with get_connection(db_path) as conn:
+        rows = conn.execute("SELECT impa_code FROM products WHERE category_code = ?", (category_code,)).fetchall()
+        return {r[0] for r in rows}
+

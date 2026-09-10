@@ -61,8 +61,8 @@ interface SearchAndFiltersProps {
   onCategoryChange: (cat: string) => void;
   selectedUom: string;
   onUomChange: (uom: string) => void;
-  reviewStatus: "all" | "verified" | "needs_review" | "missing_images";
-  onReviewStatusChange: (status: "all" | "verified" | "needs_review" | "missing_images") => void;
+  reviewStatus: "all" | "active" | "verified" | "needs_review" | "missing_images" | "not_found";
+  onReviewStatusChange: (status: "all" | "active" | "verified" | "needs_review" | "missing_images" | "not_found") => void;
   viewMode: "table" | "grid";
   onViewModeChange: (mode: "table" | "grid") => void;
   onReset: () => void;
@@ -182,6 +182,16 @@ export const SearchAndFilters: React.FC<SearchAndFiltersProps> = ({
               }`}
             >
               الكل (All)
+            </button>
+            <button
+              onClick={() => onReviewStatusChange("active")}
+              className={`px-2 py-1 rounded-md transition-all ${
+                reviewStatus === "active"
+                  ? "bg-cyan-600 text-white font-bold shadow-sm"
+                  : "text-slate-400 hover:text-white"
+              }`}
+            >
+              النشطة (Active)
             </button>
             <button
               onClick={() => onReviewStatusChange("verified")}

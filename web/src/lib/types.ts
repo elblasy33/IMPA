@@ -30,7 +30,7 @@ export interface ProductsQueryParams {
   query?: string;
   category?: string;
   uom?: string;
-  reviewStatus?: "all" | "verified" | "needs_review" | "missing_images";
+  reviewStatus?: "all" | "active" | "verified" | "needs_review" | "missing_images" | "not_found";
   page?: number;
   limit?: number;
   sortBy?: "impa_code" | "product_name" | "scraped_at";

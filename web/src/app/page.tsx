@@ -26,7 +26,7 @@ export default function Home() {
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [selectedUom, setSelectedUom] = useState("all");
-  const [reviewStatus, setReviewStatus] = useState<"all" | "verified" | "needs_review" | "missing_images">("all");
+  const [reviewStatus, setReviewStatus] = useState<"all" | "active" | "verified" | "needs_review" | "missing_images" | "not_found">("all");
   const [viewMode, setViewMode] = useState<"table" | "grid">("table");
 
   // Modals state

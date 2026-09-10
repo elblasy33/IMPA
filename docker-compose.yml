@@ -1,23 +1,48 @@
 services:
-  impa-platform:
+  # ---------------------------------------------------------------------------
+  # 1. Web Service (Next.js 15 App Router & API Engine)
+  # ---------------------------------------------------------------------------
+  web:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: impa-marine-platform
+    container_name: impa-web
     restart: unless-stopped
     ports:
-      # External host port: 3005 (can be customized via HOST_PORT environment variable)
+      # External host port: 3005 (mapped to internal Next.js port 3000)
       - "${HOST_PORT:-3005}:3000"
     volumes:
-      # Persistent volume for SQLite database, images, and Odoo CSV exports
+      # Shared persistent volume for SQLite WAL database, images, and exports
       - ./data:/app/data
     environment:
       - NODE_ENV=production
       - PORT=3000
+      - HOSTNAME=0.0.0.0
       - IMPA_DB_PATH=/app/data/impa_catalog.db
+    working_dir: /app/web
+    command: ["npm", "run", "start", "--", "-p", "3000", "-H", "0.0.0.0"]
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000/api/stats"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 15s
+
+  # ---------------------------------------------------------------------------
+  # 2. Worker Service (Python Stateful Scraper Daemon)
+  # ---------------------------------------------------------------------------
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: impa-worker
+    restart: unless-stopped
+    # Worker runs purely in the background with NO exposed ports
+    volumes:
+      # Mounts the exact same SQLite database volume in WAL mode
+      - ./data:/app/data
+    environment:
+      - PYTHONUNBUFFERED=1
+      - IMPA_DB_PATH=/app/data/impa_catalog.db
+    working_dir: /app
+    command: ["python3", "scraper/scheduler_daemon.py"]
