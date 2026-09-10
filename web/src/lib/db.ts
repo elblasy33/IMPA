@@ -125,11 +125,25 @@ export function getDb(): DatabaseSync {
 export function getProducts(params: ProductsQueryParams = {}): ProductsResponse {
   const db = getDb();
   const page = Math.max(1, Number(params.page) || 1);
-  const limit = Math.min(100, Math.max(1, Number(params.limit) || 20));
+  const limit = Math.min(1000, Math.max(1, Number(params.limit) || 20));
   const offset = (page - 1) * limit;
 
   const conditions: string[] = [];
   const queryParams: (string | number)[] = [];
+
+  // Filter by IMPA Code Range (من كود ... إلى كود ...)
+  if (params.fromCode && params.fromCode.trim()) {
+    const rawFrom = params.fromCode.trim();
+    const cleanFrom = /^\d+$/.test(rawFrom) ? rawFrom.padStart(6, "0") : rawFrom;
+    conditions.push("impa_code >= ?");
+    queryParams.push(cleanFrom);
+  }
+  if (params.toCode && params.toCode.trim()) {
+    const rawTo = params.toCode.trim();
+    const cleanTo = /^\d+$/.test(rawTo) ? rawTo.padStart(6, "0") : rawTo;
+    conditions.push("impa_code <= ?");
+    queryParams.push(cleanTo);
+  }
 
   // Search by code or product name or description
   if (params.query && params.query.trim()) {

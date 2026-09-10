@@ -306,15 +306,15 @@ export const CampaignSchedulerModal: React.FC<CampaignSchedulerModalProps> = ({
               >
                 <div className="flex items-center justify-between mb-1.5">
                   <span className="text-xs font-bold text-white flex items-center gap-1.5">
-                    <AlertTriangle className="w-4 h-4 text-rose-400" />
-                    Turbo Stage
+                    <Sparkles className="w-4 h-4 text-cyan-400" />
+                    Turbo High-Speed (سريع جداً)
                   </span>
-                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-rose-950 text-rose-400 border border-rose-800">
-                    أسرع - حذر
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-cyan-950 text-cyan-400 border border-cyan-800 font-bold">
+                    استراحة دقيقتين
                   </span>
                 </div>
                 <p className="text-[11px] text-slate-400 leading-snug">
-                  فواصل قصيرة (0.8s - 1.8s). مفيد عند سحب فئات صغيرة محددة.
+                  فواصل سريعة جداً (0.2s - 0.5s) واستراحة دقيقتين (120 ثانية) بين كل كمية بدون انتظار يوم كامل.
                 </p>
               </div>
             </div>
@@ -344,17 +344,18 @@ export const CampaignSchedulerModal: React.FC<CampaignSchedulerModalProps> = ({
             {/* Batch Size */}
             <div className="space-y-1.5">
               <label className="text-xs font-semibold text-slate-300">
-                الحد الأقصى للدفعة (منتج):
+                حجم الدفعة (استراحة دقيقتين بعدها):
               </label>
               <select
                 value={batchLimit}
                 onChange={(e) => setBatchLimit(Number(e.target.value))}
-                className="w-full px-3 py-2 text-xs rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500/50 cursor-pointer"
+                className="w-full px-3 py-2 text-xs rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500/50 cursor-pointer font-semibold text-cyan-300"
               >
-                <option value={20}>20 منتج (دفعة سريعة)</option>
-                <option value={35}>35 منتج (دفعة متوازنة)</option>
-                <option value={60}>60 منتج (دفعة متوسطة)</option>
-                <option value={120}>120 منتج (دفعة ليلية كبرى)</option>
+                <option value={35} className="bg-slate-900 text-white">35 منتج (دفعة تجريبية)</option>
+                <option value={60} className="bg-slate-900 text-white">60 منتج (دفعة متوسطة)</option>
+                <option value={150} className="bg-slate-900 text-white">150 منتج (دفعة قياسية)</option>
+                <option value={300} className="bg-slate-900 text-white">300 منتج (دفعة سريعة)</option>
+                <option value={500} className="bg-slate-900 text-white">500 منتج (دفعة كبرى)</option>
               </select>
             </div>
 

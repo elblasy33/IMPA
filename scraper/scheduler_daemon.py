@@ -20,6 +20,7 @@ import time
 import random
 import json
 import logging
+from datetime import datetime
 from typing import Dict, Any, Optional, List, Set
 from pathlib import Path
 import requests
@@ -53,28 +54,28 @@ logging.basicConfig(
 )
 logger = logging.getLogger("SchedulerDaemon")
 
-# Anti-Ban Profiles configuration
+# Anti-Ban Profiles configuration (Optimized for High-Speed with 2-minute batch cooldown)
 STEALTH_PROFILES = {
-    "stealth": {
-        "name": "Ultra-Stealth Safe",
-        "delay_min": 2.5,
-        "delay_max": 5.0,
-        "batch_cooldown": 12.0,
-        "circuit_breaker_cooldown": 900,  # 15 minutes
+    "turbo": {
+        "name": "Turbo High-Speed (2m Batch Rest)",
+        "delay_min": 0.2,
+        "delay_max": 0.5,
+        "batch_cooldown": 0.8,
+        "circuit_breaker_cooldown": 180,  # 3 minutes
     },
     "balanced": {
-        "name": "Balanced Speed",
-        "delay_min": 1.5,
-        "delay_max": 3.2,
-        "batch_cooldown": 7.0,
-        "circuit_breaker_cooldown": 600,  # 10 minutes
+        "name": "Balanced Fast",
+        "delay_min": 0.4,
+        "delay_max": 0.9,
+        "batch_cooldown": 1.5,
+        "circuit_breaker_cooldown": 300,  # 5 minutes
     },
-    "turbo": {
-        "name": "Turbo Stage",
+    "stealth": {
+        "name": "Standard Stealth",
         "delay_min": 0.8,
-        "delay_max": 1.8,
-        "batch_cooldown": 3.0,
-        "circuit_breaker_cooldown": 300,
+        "delay_max": 1.6,
+        "batch_cooldown": 2.5,
+        "circuit_breaker_cooldown": 600,  # 10 minutes
     }
 }
 
@@ -303,19 +304,16 @@ class ImpaSchedulerDaemon:
         if status == "paused":
             time.sleep(5)
             return
-        # 3. Check if Daily Cap was reached (with automated 24h day rollover)
+        # 3. Check if Batch / Daily Cap was reached (with automated 2-minute rest cooldown instead of waiting 24h)
         if daily_cap > 0 and today_count >= daily_cap:
-            last_run = campaign.get("last_run_at", "") or ""
-            last_date = last_run[:10] if len(last_run) >= 10 else ""
-            current_date = datetime.utcnow().strftime("%Y-%m-%d")
-            if last_date and current_date != last_date:
-                logger.info(f"🌅 New day detected ({current_date} != {last_date})! Auto-resetting daily budget cap (0/{daily_cap}).")
-                update_campaign({"today_count": 0, "last_run_at": datetime.utcnow().isoformat()}, db_path=self.db_path)
-                today_count = 0
-            else:
-                logger.info(f"🛑 Daily budget cap reached ({today_count}/{daily_cap} items). Sleeping for 60s...")
-                time.sleep(60)
-                return
+            logger.info(f"☕ Batch threshold reached ({today_count}/{daily_cap} items). Resting for 2 minutes (120s) before next batch...")
+            for _ in range(120):
+                if not self.running:
+                    return
+                time.sleep(1)
+            logger.info("🟢 2-minute batch cooldown finished. Resuming scraping cycle immediately!")
+            update_campaign({"today_count": 0, "last_run_at": datetime.utcnow().isoformat()}, db_path=self.db_path)
+            today_count = 0
 
         # 4. Pick next target category from queue
         queue = self.ensure_queue_populated()
@@ -385,8 +383,13 @@ class ImpaSchedulerDaemon:
                 logger.info("Campaign paused by user. Breaking stage.")
                 break
             if daily_cap > 0 and fresh_campaign.get("today_count", 0) >= daily_cap:
-                logger.info("Daily cap reached mid-category. Pausing stage.")
-                break
+                logger.info(f"☕ Batch quantity reached mid-category ({fresh_campaign.get('today_count')}/{daily_cap}). Resting for 2 minutes (120s)...")
+                for _ in range(120):
+                    if not self.running:
+                        break
+                    time.sleep(1)
+                update_campaign({"today_count": 0, "last_run_at": datetime.utcnow().isoformat()}, db_path=self.db_path)
+                logger.info("🟢 2-minute batch cooldown finished. Resuming category!")
 
             sub_url = f"{BASE_URL}{subcat_path}"
             logger.info(f"Inspecting subcategory ({sub_index + 1}/{total_subs}): {subcat_path.split('/')[-1]}")
@@ -426,6 +429,13 @@ class ImpaSchedulerDaemon:
             f"Stage completed for Category [{cat_code}]: +{items_scraped_stage} items. "
             f"Progress: {done_subs}/{total_subs} subcategories."
         )
+        if self.running and new_status == "completed":
+            logger.info(f"☕ Category [{cat_code}] complete! Resting for 2 minutes (120s) before next category...")
+            for _ in range(120):
+                if not self.running:
+                    break
+                time.sleep(1)
+            logger.info("🟢 2-minute rest complete. Proceeding to next category!")
 
     def start(self) -> None:
         """Main daemon loop."""
@@ -444,6 +454,7 @@ if __name__ == "__main__":
     parser.add_argument("--reset-budget", action="store_true", help="Reset today_count to 0 and resume immediately")
     parser.add_argument("--reset-queue", action="store_true", help="Reset category queue status to pending (start from Cat 11)")
     parser.add_argument("--reset-all", action="store_true", help="Reset budget and queue to start completely from the beginning")
+    parser.add_argument("--turbo", action="store_true", help="Set speed profile to turbo immediately")
     parser.add_argument("--cap", type=int, default=None, help="Update daily budget cap (0 for unlimited)")
     parser.add_argument("--status", action="store_true", help="Show current campaign status and progress")
     args = parser.parse_args()
@@ -453,6 +464,7 @@ if __name__ == "__main__":
         queue = get_category_queue()
         done = sum(1 for c in queue if c["status"] == "completed")
         print(f"Campaign Status: {camp.get('status')}")
+        print(f"Profile: {camp.get('delay_profile')}")
         print(f"Daily Budget: {camp.get('today_count')}/{camp.get('daily_cap')}")
         print(f"Category Progress: {done}/{len(queue)} categories completed")
         sys.exit(0)
@@ -467,10 +479,17 @@ if __name__ == "__main__":
         print("✅ Campaign queue and budget reset to 0. Starting from Category 11.")
         sys.exit(0)
 
+    updates = {}
     if args.cap is not None:
-        update_campaign({"daily_cap": args.cap})
-        print(f"✅ Daily budget cap updated to {args.cap}.")
-        sys.exit(0)
+        updates["daily_cap"] = args.cap
+        print(f"✅ Daily budget cap set to {args.cap}.")
+
+    if args.turbo:
+        updates["delay_profile"] = "turbo"
+        print("⚡ High-Speed Turbo mode activated (fast requests + 2-minute batch cooldown).")
+
+    if updates:
+        update_campaign(updates)
 
     daemon = ImpaSchedulerDaemon()
     daemon.start()

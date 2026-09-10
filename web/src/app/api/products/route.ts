@@ -10,6 +10,8 @@ export async function GET(request: NextRequest) {
 
     const params: ProductsQueryParams = {
       query: searchParams.get("query") || undefined,
+      fromCode: searchParams.get("fromCode") || undefined,
+      toCode: searchParams.get("toCode") || undefined,
       category: searchParams.get("category") || undefined,
       uom: searchParams.get("uom") || undefined,
       reviewStatus: (searchParams.get("reviewStatus") as any) || undefined,

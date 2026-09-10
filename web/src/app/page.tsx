@@ -26,6 +26,10 @@ export default function Home() {
   // Filters
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
+  const [fromCode, setFromCode] = useState("");
+  const [toCode, setToCode] = useState("");
+  const [activeRange, setActiveRange] = useState<{ from: string; to: string } | null>(null);
+  const [pageSize, setPageSize] = useState(24);
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [selectedUom, setSelectedUom] = useState("all");
   const [reviewStatus, setReviewStatus] = useState<ReviewStatusFilter>("all");
@@ -77,11 +81,13 @@ export default function Home() {
     try {
       const params = new URLSearchParams();
       if (debouncedQuery.trim()) params.set("query", debouncedQuery.trim());
+      if (activeRange?.from) params.set("fromCode", activeRange.from);
+      if (activeRange?.to) params.set("toCode", activeRange.to);
       if (selectedCategory !== "all") params.set("category", selectedCategory);
       if (selectedUom !== "all") params.set("uom", selectedUom);
       if (reviewStatus !== "all") params.set("reviewStatus", reviewStatus);
       params.set("page", page.toString());
-      params.set("limit", viewMode === "grid" ? "24" : "20");
+      params.set("limit", pageSize.toString());
 
       const res = await fetch(`/api/products?${params.toString()}`, { cache: "no-store" });
       if (res.ok) {
@@ -95,7 +101,7 @@ export default function Home() {
     } finally {
       if (!silent) setLoading(false);
     }
-  }, [debouncedQuery, selectedCategory, selectedUom, reviewStatus, page, viewMode]);
+  }, [debouncedQuery, activeRange, selectedCategory, selectedUom, reviewStatus, page, pageSize]);
 
   // Initial load & 5-Second Automatic Live Polling
   useEffect(() => {
@@ -120,10 +126,27 @@ export default function Home() {
     setRefreshing(false);
   };
 
+  // Range filter actions
+  const handleApplyRange = () => {
+    if (!fromCode.trim() && !toCode.trim()) return;
+    setActiveRange({ from: fromCode.trim(), to: toCode.trim() });
+    setPage(1);
+  };
+
+  const handleClearRange = () => {
+    setFromCode("");
+    setToCode("");
+    setActiveRange(null);
+    setPage(1);
+  };
+
   // Reset filters handler
   const handleResetFilters = () => {
     setSearchQuery("");
     setDebouncedQuery("");
+    setFromCode("");
+    setToCode("");
+    setActiveRange(null);
     setSelectedCategory("all");
     setSelectedUom("all");
     setReviewStatus("all");
@@ -206,6 +229,18 @@ export default function Home() {
           reviewStatus={reviewStatus}
           onReviewStatusChange={(status) => {
             setReviewStatus(status);
+            setPage(1);
+          }}
+          fromCode={fromCode}
+          onFromCodeChange={setFromCode}
+          toCode={toCode}
+          onToCodeChange={setToCode}
+          onApplyRange={handleApplyRange}
+          onClearRange={handleClearRange}
+          isRangeActive={activeRange !== null}
+          pageSize={pageSize}
+          onPageSizeChange={(size) => {
+            setPageSize(size);
             setPage(1);
           }}
           viewMode={viewMode}

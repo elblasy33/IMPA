@@ -38,6 +38,8 @@ export type ReviewStatusFilter =
 
 export interface ProductsQueryParams {
   query?: string;
+  fromCode?: string;
+  toCode?: string;
   category?: string;
   uom?: string;
   reviewStatus?: ReviewStatusFilter;

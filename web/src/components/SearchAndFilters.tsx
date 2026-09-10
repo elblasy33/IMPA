@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { Search, X, LayoutGrid, List, SlidersHorizontal, RotateCcw } from "lucide-react";
+import { Search, X, LayoutGrid, List, SlidersHorizontal, RotateCcw, ArrowRightLeft } from "lucide-react";
 import { ReviewStatusFilter } from "@/lib/types";
 
 export const IMPA_CATEGORIES_LIST = [
@@ -64,6 +64,15 @@ interface SearchAndFiltersProps {
   onUomChange: (uom: string) => void;
   reviewStatus: ReviewStatusFilter;
   onReviewStatusChange: (status: ReviewStatusFilter) => void;
+  fromCode: string;
+  onFromCodeChange: (value: string) => void;
+  toCode: string;
+  onToCodeChange: (value: string) => void;
+  onApplyRange: () => void;
+  onClearRange: () => void;
+  isRangeActive: boolean;
+  pageSize: number;
+  onPageSizeChange: (size: number) => void;
   viewMode: "table" | "grid";
   onViewModeChange: (mode: "table" | "grid") => void;
   onReset: () => void;
@@ -79,12 +88,26 @@ export const SearchAndFilters: React.FC<SearchAndFiltersProps> = ({
   onUomChange,
   reviewStatus,
   onReviewStatusChange,
+  fromCode,
+  onFromCodeChange,
+  toCode,
+  onToCodeChange,
+  onApplyRange,
+  onClearRange,
+  isRangeActive,
+  pageSize,
+  onPageSizeChange,
   viewMode,
   onViewModeChange,
   onReset,
   totalResults,
 }) => {
-  const hasActiveFilters = searchQuery !== "" || selectedCategory !== "all" || selectedUom !== "all" || reviewStatus !== "all";
+  const hasActiveFilters =
+    searchQuery !== "" ||
+    selectedCategory !== "all" ||
+    selectedUom !== "all" ||
+    reviewStatus !== "all" ||
+    isRangeActive;
 
   return (
     <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-4 sm:p-5 backdrop-blur-md shadow-xl mb-6 space-y-4">
@@ -135,6 +158,76 @@ export const SearchAndFilters: React.FC<SearchAndFiltersProps> = ({
             <LayoutGrid className="w-4 h-4" />
             <span className="hidden sm:inline">Grid</span>
           </button>
+        </div>
+      </div>
+
+      {/* IMPA Code Range Selector ("من كود ... إلى كود ...") & Items Per Page */}
+      <div className="flex flex-wrap items-center justify-between gap-3 p-2.5 rounded-xl bg-slate-950/60 border border-slate-800/80">
+        <div className="flex flex-wrap items-center gap-2.5 text-xs">
+          <div className="flex items-center space-x-1.5 font-bold text-cyan-400 bg-cyan-950/60 px-2.5 py-1 rounded-lg border border-cyan-800/60">
+            <ArrowRightLeft className="w-3.5 h-3.5" />
+            <span>عرض بنطاق الأكواد (Range):</span>
+          </div>
+
+          <div className="flex items-center space-x-1.5">
+            <span className="text-slate-400 text-xs font-medium">من كود:</span>
+            <input
+              type="text"
+              value={fromCode}
+              onChange={(e) => onFromCodeChange(e.target.value)}
+              placeholder="مثال 100501"
+              maxLength={6}
+              className="w-24 px-2 py-1 text-xs rounded-lg bg-slate-800 border border-slate-700 text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-cyan-500 font-mono text-center tracking-wider"
+              onKeyDown={(e) => e.key === "Enter" && onApplyRange()}
+            />
+          </div>
+
+          <div className="flex items-center space-x-1.5">
+            <span className="text-slate-400 text-xs font-medium">إلى كود:</span>
+            <input
+              type="text"
+              value={toCode}
+              onChange={(e) => onToCodeChange(e.target.value)}
+              placeholder="مثال 100599"
+              maxLength={6}
+              className="w-24 px-2 py-1 text-xs rounded-lg bg-slate-800 border border-slate-700 text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-cyan-500 font-mono text-center tracking-wider"
+              onKeyDown={(e) => e.key === "Enter" && onApplyRange()}
+            />
+          </div>
+
+          <button
+            onClick={onApplyRange}
+            className="px-3.5 py-1 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-semibold transition-all shadow-sm shadow-cyan-600/30 cursor-pointer text-xs active:scale-95"
+          >
+            تطبيق النطاق
+          </button>
+
+          {isRangeActive && (
+            <button
+              onClick={onClearRange}
+              className="px-2.5 py-1 rounded-lg bg-rose-950/60 hover:bg-rose-900/80 border border-rose-800 text-rose-300 transition-all cursor-pointer text-xs flex items-center space-x-1"
+              title="إلغاء تصفية النطاق وعرض كل المنتجات"
+            >
+              <X className="w-3.5 h-3.5" />
+              <span>إلغاء النطاق</span>
+            </button>
+          )}
+        </div>
+
+        {/* Page Size / Items per page Selector */}
+        <div className="flex items-center space-x-2 text-xs text-slate-300">
+          <span className="text-[11px] text-slate-400">عرض في الصفحة:</span>
+          <select
+            value={pageSize}
+            onChange={(e) => onPageSizeChange(Number(e.target.value))}
+            className="px-2.5 py-1 text-xs rounded-lg bg-slate-800 border border-slate-700 text-cyan-300 font-bold focus:outline-none focus:ring-1 focus:ring-cyan-500 cursor-pointer"
+          >
+            <option value={20} className="bg-slate-900 text-white">20 منتج</option>
+            <option value={50} className="bg-slate-900 text-white">50 منتج</option>
+            <option value={100} className="bg-slate-900 text-white">100 منتج</option>
+            <option value={250} className="bg-slate-900 text-white">250 منتج</option>
+            <option value={500} className="bg-slate-900 text-white">500 منتج</option>
+          </select>
         </div>
       </div>
 
