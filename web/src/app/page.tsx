@@ -8,6 +8,7 @@ import { ProductTable } from "@/components/ProductTable";
 import { ProductGrid } from "@/components/ProductGrid";
 import { ProductModal } from "@/components/ProductModal";
 import { ScraperControlModal } from "@/components/ScraperControlModal";
+import { CampaignSchedulerModal } from "@/components/CampaignSchedulerModal";
 import { ImpaProduct, DashboardStats } from "@/lib/types";
 
 export default function Home() {
@@ -25,11 +26,13 @@ export default function Home() {
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [selectedUom, setSelectedUom] = useState("all");
+  const [reviewStatus, setReviewStatus] = useState<"all" | "verified" | "needs_review" | "missing_images">("all");
   const [viewMode, setViewMode] = useState<"table" | "grid">("table");
 
   // Modals state
   const [selectedProduct, setSelectedProduct] = useState<ImpaProduct | null>(null);
   const [isScraperModalOpen, setIsScraperModalOpen] = useState(false);
+  const [isCampaignModalOpen, setIsCampaignModalOpen] = useState(false);
 
   // Debounce search query
   useEffect(() => {
@@ -61,6 +64,7 @@ export default function Home() {
       if (debouncedQuery.trim()) params.set("query", debouncedQuery.trim());
       if (selectedCategory !== "all") params.set("category", selectedCategory);
       if (selectedUom !== "all") params.set("uom", selectedUom);
+      if (reviewStatus !== "all") params.set("reviewStatus", reviewStatus);
       params.set("page", page.toString());
       params.set("limit", viewMode === "grid" ? "24" : "20");
 
@@ -76,7 +80,7 @@ export default function Home() {
     } finally {
       setLoading(false);
     }
-  }, [debouncedQuery, selectedCategory, selectedUom, page, viewMode]);
+  }, [debouncedQuery, selectedCategory, selectedUom, reviewStatus, page, viewMode]);
 
   // Load initial data
   useEffect(() => {
@@ -100,6 +104,7 @@ export default function Home() {
     setDebouncedQuery("");
     setSelectedCategory("all");
     setSelectedUom("all");
+    setReviewStatus("all");
     setPage(1);
   };
 
@@ -125,6 +130,7 @@ export default function Home() {
       <Header
         onRefresh={handleRefresh}
         onOpenScraperModal={() => setIsScraperModalOpen(true)}
+        onOpenCampaignModal={() => setIsCampaignModalOpen(true)}
         isRefreshing={refreshing}
         totalProducts={stats?.total_products || 0}
       />
@@ -146,6 +152,11 @@ export default function Home() {
           selectedUom={selectedUom}
           onUomChange={(uom) => {
             setSelectedUom(uom);
+            setPage(1);
+          }}
+          reviewStatus={reviewStatus}
+          onReviewStatusChange={(status) => {
+            setReviewStatus(status);
             setPage(1);
           }}
           viewMode={viewMode}
@@ -190,6 +201,14 @@ export default function Home() {
         onClose={() => setIsScraperModalOpen(false)}
         onDataUpdated={handleRefresh}
       />
+
+      {/* Anti-Ban Campaign Scheduler Modal */}
+      <CampaignSchedulerModal
+        isOpen={isCampaignModalOpen}
+        onClose={() => setIsCampaignModalOpen(false)}
+        onDataUpdated={handleRefresh}
+      />
+
 
       {/* Footer */}
       <footer className="border-t border-slate-800/80 bg-slate-950/80 py-6 text-center text-xs text-slate-500">

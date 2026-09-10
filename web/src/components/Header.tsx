@@ -6,6 +6,7 @@ import { Anchor, Download, RefreshCw, Database, ShieldCheck } from "lucide-react
 interface HeaderProps {
   onRefresh: () => void;
   onOpenScraperModal: () => void;
+  onOpenCampaignModal: () => void;
   isRefreshing?: boolean;
   totalProducts?: number;
 }
@@ -13,6 +14,7 @@ interface HeaderProps {
 export const Header: React.FC<HeaderProps> = ({
   onRefresh,
   onOpenScraperModal,
+  onOpenCampaignModal,
   isRefreshing = false,
   totalProducts = 0,
 }) => {
@@ -44,9 +46,9 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
 
         {/* Database Live Status & Actions */}
-        <div className="flex items-center space-x-3 sm:space-x-4">
+        <div className="flex items-center space-x-2.5 sm:space-x-3">
           {/* SQLite WAL indicator */}
-          <div className="hidden md:flex items-center space-x-2 px-3 py-1.5 rounded-lg bg-slate-800/80 border border-slate-700/70 text-xs text-slate-300">
+          <div className="hidden lg:flex items-center space-x-2 px-3 py-1.5 rounded-lg bg-slate-800/80 border border-slate-700/70 text-xs text-slate-300">
             <span className="relative flex h-2 w-2">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
               <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
@@ -55,18 +57,25 @@ export const Header: React.FC<HeaderProps> = ({
             <span>SQLite (WAL Mode)</span>
           </div>
 
+          {/* Anti-Ban Campaign Planner Button */}
+          <button
+            onClick={onOpenCampaignModal}
+            className="px-3.5 py-2 rounded-lg bg-gradient-to-r from-emerald-900 to-teal-900 hover:from-emerald-800 hover:to-teal-800 border border-emerald-500/60 text-emerald-200 hover:text-white text-xs font-bold flex items-center space-x-1.5 transition-all shadow-md shadow-emerald-950/40 active:scale-95 cursor-pointer"
+            title="Open Anti-Ban Campaign Planner & Category Queue"
+          >
+            <ShieldCheck className="w-4 h-4 text-emerald-400" />
+            <span>خطة السحب الآمنة (Anti-Ban)</span>
+          </button>
+
           {/* Scraper Control Center Button */}
           <button
             onClick={onOpenScraperModal}
-            className="px-3 py-2 rounded-lg bg-emerald-950/80 hover:bg-emerald-900 border border-emerald-700/80 text-emerald-300 hover:text-white text-xs font-semibold flex items-center space-x-1.5 transition-all shadow-sm active:scale-95 cursor-pointer"
-            title="Open Scraper Control Center to fetch data in stages"
+            className="px-3 py-2 rounded-lg bg-slate-800/90 hover:bg-slate-700 border border-slate-700 text-slate-300 hover:text-white text-xs font-semibold flex items-center space-x-1.5 transition-all shadow-sm active:scale-95 cursor-pointer"
+            title="Open Scraper Control Center"
           >
-            <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-            </span>
-            <span>Scraper Hub / مركز السحب</span>
+            <span>Console / مركز السحب</span>
           </button>
+
 
           {/* Refresh Button */}
           <button

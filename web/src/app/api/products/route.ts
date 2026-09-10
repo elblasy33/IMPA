@@ -12,6 +12,7 @@ export async function GET(request: NextRequest) {
       query: searchParams.get("query") || undefined,
       category: searchParams.get("category") || undefined,
       uom: searchParams.get("uom") || undefined,
+      reviewStatus: (searchParams.get("reviewStatus") as any) || undefined,
       page: searchParams.get("page") ? parseInt(searchParams.get("page")!, 10) : 1,
       limit: searchParams.get("limit") ? parseInt(searchParams.get("limit")!, 10) : 24,
       sortBy: (searchParams.get("sortBy") as any) || "impa_code",

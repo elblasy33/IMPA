@@ -61,6 +61,8 @@ interface SearchAndFiltersProps {
   onCategoryChange: (cat: string) => void;
   selectedUom: string;
   onUomChange: (uom: string) => void;
+  reviewStatus: "all" | "verified" | "needs_review" | "missing_images";
+  onReviewStatusChange: (status: "all" | "verified" | "needs_review" | "missing_images") => void;
   viewMode: "table" | "grid";
   onViewModeChange: (mode: "table" | "grid") => void;
   onReset: () => void;
@@ -74,12 +76,14 @@ export const SearchAndFilters: React.FC<SearchAndFiltersProps> = ({
   onCategoryChange,
   selectedUom,
   onUomChange,
+  reviewStatus,
+  onReviewStatusChange,
   viewMode,
   onViewModeChange,
   onReset,
   totalResults,
 }) => {
-  const hasActiveFilters = searchQuery !== "" || selectedCategory !== "all" || selectedUom !== "all";
+  const hasActiveFilters = searchQuery !== "" || selectedCategory !== "all" || selectedUom !== "all" || reviewStatus !== "all";
 
   return (
     <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-4 sm:p-5 backdrop-blur-md shadow-xl mb-6 space-y-4">
@@ -133,7 +137,7 @@ export const SearchAndFilters: React.FC<SearchAndFiltersProps> = ({
         </div>
       </div>
 
-      {/* Filter Dropdowns & Status */}
+      {/* Filter Dropdowns & Review Status Chips */}
       <div className="flex flex-wrap items-center justify-between gap-3 pt-1 border-t border-slate-800/60">
         <div className="flex flex-wrap items-center gap-2.5">
           <div className="flex items-center space-x-1.5 text-xs text-slate-400 font-medium mr-1">
@@ -145,7 +149,7 @@ export const SearchAndFilters: React.FC<SearchAndFiltersProps> = ({
           <select
             value={selectedCategory}
             onChange={(e) => onCategoryChange(e.target.value)}
-            className="px-3 py-1.5 text-xs rounded-lg bg-slate-800/90 border border-slate-700 text-slate-200 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 cursor-pointer max-w-[260px] truncate"
+            className="px-3 py-1.5 text-xs rounded-lg bg-slate-800/90 border border-slate-700 text-slate-200 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 cursor-pointer max-w-[240px] truncate"
           >
             {IMPA_CATEGORIES_LIST.map((cat) => (
               <option key={cat.code} value={cat.code} className="bg-slate-900 text-white">
@@ -167,11 +171,55 @@ export const SearchAndFilters: React.FC<SearchAndFiltersProps> = ({
             ))}
           </select>
 
+          {/* Review Status Filter Chips */}
+          <div className="flex items-center bg-slate-800/70 p-0.5 rounded-lg border border-slate-700/80 text-[11px]">
+            <button
+              onClick={() => onReviewStatusChange("all")}
+              className={`px-2 py-1 rounded-md transition-all ${
+                reviewStatus === "all"
+                  ? "bg-cyan-600 text-white font-bold shadow-sm"
+                  : "text-slate-400 hover:text-white"
+              }`}
+            >
+              الكل (All)
+            </button>
+            <button
+              onClick={() => onReviewStatusChange("verified")}
+              className={`px-2 py-1 rounded-md transition-all ${
+                reviewStatus === "verified"
+                  ? "bg-emerald-600 text-white font-bold shadow-sm"
+                  : "text-slate-400 hover:text-white"
+              }`}
+            >
+              المعتمدة (Verified)
+            </button>
+            <button
+              onClick={() => onReviewStatusChange("missing_images")}
+              className={`px-2 py-1 rounded-md transition-all ${
+                reviewStatus === "missing_images"
+                  ? "bg-amber-600 text-white font-bold shadow-sm"
+                  : "text-slate-400 hover:text-white"
+              }`}
+            >
+              صور مفقودة
+            </button>
+            <button
+              onClick={() => onReviewStatusChange("needs_review")}
+              className={`px-2 py-1 rounded-md transition-all ${
+                reviewStatus === "needs_review"
+                  ? "bg-rose-600 text-white font-bold shadow-sm"
+                  : "text-slate-400 hover:text-white"
+              }`}
+            >
+              تحتاج تدقيق
+            </button>
+          </div>
+
           {/* Reset Filters */}
           {hasActiveFilters && (
             <button
               onClick={onReset}
-              className="px-2.5 py-1.5 rounded-lg bg-red-950/40 hover:bg-red-900/60 border border-red-800/60 text-red-300 text-xs flex items-center space-x-1 transition-all"
+              className="px-2.5 py-1.5 rounded-lg bg-red-950/40 hover:bg-red-900/60 border border-red-800/60 text-red-300 text-xs flex items-center space-x-1 transition-all cursor-pointer"
               title="Reset all search queries and filters"
             >
               <RotateCcw className="w-3 h-3" />
@@ -188,3 +236,4 @@ export const SearchAndFilters: React.FC<SearchAndFiltersProps> = ({
     </div>
   );
 };
+

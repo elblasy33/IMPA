@@ -42,7 +42,9 @@ def init_db(db_path: Path = DB_PATH) -> None:
                 local_image_path TEXT,
                 source_url TEXT,
                 scraped_at TEXT NOT NULL,
-                status TEXT DEFAULT 'active'
+                status TEXT DEFAULT 'active',
+                quality_score INTEGER DEFAULT 80,
+                review_status TEXT DEFAULT 'auto_scraped'
             );
 
             CREATE INDEX IF NOT EXISTS idx_products_category ON products(category_code);
@@ -56,27 +58,82 @@ def init_db(db_path: Path = DB_PATH) -> None:
                 total_scraped INTEGER DEFAULT 0,
                 updated_at TEXT NOT NULL
             );
+
+            CREATE TABLE IF NOT EXISTS scrape_campaigns (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                status TEXT DEFAULT 'idle',
+                daily_cap INTEGER DEFAULT 300,
+                today_count INTEGER DEFAULT 0,
+                delay_profile TEXT DEFAULT 'stealth',
+                current_category TEXT,
+                last_run_at TEXT,
+                created_at TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS category_queue (
+                category_code TEXT PRIMARY KEY,
+                category_name TEXT NOT NULL,
+                slug TEXT NOT NULL,
+                subcategories_total INTEGER DEFAULT 0,
+                subcategories_done INTEGER DEFAULT 0,
+                items_found INTEGER DEFAULT 0,
+                status TEXT DEFAULT 'pending',
+                last_scraped_at TEXT
+            );
         """)
+        # Migrations for existing products table
+        try:
+            conn.execute("ALTER TABLE products ADD COLUMN quality_score INTEGER DEFAULT 80;")
+        except Exception:
+            pass
+        try:
+            conn.execute("ALTER TABLE products ADD COLUMN review_status TEXT DEFAULT 'auto_scraped';")
+        except Exception:
+            pass
+        try:
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_products_review ON products(review_status);")
+        except Exception:
+            pass
         conn.commit()
+
+def calculate_quality_score(name: str, desc: str, uom: str, img: Optional[str]) -> int:
+    score = 0
+    if name and len(name.strip()) > 3:
+        score += 30
+    if desc and len(desc.strip()) > 25:
+        score += 30
+    elif desc and len(desc.strip()) > 5:
+        score += 15
+    if uom and len(uom.strip()) >= 2:
+        score += 20
+    if img and len(img.strip()) > 10:
+        score += 20
+    return min(100, max(0, score))
 
 def upsert_product(product: Dict[str, Any], db_path: Path = DB_PATH) -> bool:
     """
-    Inserts or updates a product record incrementally.
-    Guarantees zero data loss if the scraper terminates prematurely.
+    Inserts or updates a product record incrementally with automated quality scoring.
     """
     category_code = product.get("category_code") or str(product["impa_code"])[:2]
     category_name = product.get("category_name") or IMPA_CATEGORIES.get(category_code, "Marine Equipment")
     
     scraped_at = product.get("scraped_at") or datetime.utcnow().isoformat()
     uom = (product.get("uom") or "PCS").upper()
+    name = product["product_name"].strip()
+    desc = product.get("description", "").strip()
+    img = product.get("image_url")
+    
+    quality_score = calculate_quality_score(name, desc, uom, img)
+    review_status = product.get("review_status") or ("verified" if quality_score >= 90 else "auto_scraped")
 
     with get_connection(db_path) as conn:
         conn.execute("""
             INSERT INTO products (
                 impa_code, category_code, category_name, product_name,
                 description, uom, image_url, local_image_path,
-                source_url, scraped_at, status
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                source_url, scraped_at, status, quality_score, review_status
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(impa_code) DO UPDATE SET
                 product_name = excluded.product_name,
                 category_code = excluded.category_code,
@@ -87,19 +144,26 @@ def upsert_product(product: Dict[str, Any], db_path: Path = DB_PATH) -> bool:
                 local_image_path = COALESCE(excluded.local_image_path, products.local_image_path),
                 source_url = excluded.source_url,
                 scraped_at = excluded.scraped_at,
-                status = excluded.status
+                status = excluded.status,
+                quality_score = excluded.quality_score,
+                review_status = CASE 
+                    WHEN products.review_status = 'verified' THEN 'verified'
+                    ELSE excluded.review_status 
+                END
         """, (
             str(product["impa_code"]).zfill(6),
             category_code,
             category_name,
-            product["product_name"].strip(),
-            product.get("description", "").strip(),
+            name,
+            desc,
             uom,
-            product.get("image_url"),
+            img,
             product.get("local_image_path"),
             product.get("source_url"),
             scraped_at,
-            product.get("status", "active")
+            product.get("status", "active"),
+            quality_score,
+            review_status
         ))
         conn.commit()
     return True
@@ -113,12 +177,19 @@ def upsert_batch(products: List[Dict[str, Any]], db_path: Path = DB_PATH) -> int
         for p in products:
             cat_code = p.get("category_code") or str(p["impa_code"])[:2]
             cat_name = p.get("category_name") or IMPA_CATEGORIES.get(cat_code, "Marine Equipment")
+            name = p["product_name"].strip()
+            desc = p.get("description", "").strip()
+            uom = (p.get("uom") or "PCS").upper()
+            img = p.get("image_url")
+            q_score = calculate_quality_score(name, desc, uom, img)
+            r_status = p.get("review_status") or ("verified" if q_score >= 90 else "auto_scraped")
+
             conn.execute("""
                 INSERT INTO products (
                     impa_code, category_code, category_name, product_name,
                     description, uom, image_url, local_image_path,
-                    source_url, scraped_at, status
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    source_url, scraped_at, status, quality_score, review_status
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(impa_code) DO UPDATE SET
                     product_name = excluded.product_name,
                     category_code = excluded.category_code,
@@ -129,19 +200,26 @@ def upsert_batch(products: List[Dict[str, Any]], db_path: Path = DB_PATH) -> int
                     local_image_path = COALESCE(excluded.local_image_path, products.local_image_path),
                     source_url = excluded.source_url,
                     scraped_at = excluded.scraped_at,
-                    status = excluded.status
+                    status = excluded.status,
+                    quality_score = excluded.quality_score,
+                    review_status = CASE 
+                        WHEN products.review_status = 'verified' THEN 'verified'
+                        ELSE excluded.review_status 
+                    END
             """, (
                 str(p["impa_code"]).zfill(6),
                 cat_code,
                 cat_name,
-                p["product_name"].strip(),
-                p.get("description", "").strip(),
-                (p.get("uom") or "PCS").upper(),
-                p.get("image_url"),
+                name,
+                desc,
+                uom,
+                img,
                 p.get("local_image_path"),
                 p.get("source_url"),
                 p.get("scraped_at") or datetime.utcnow().isoformat(),
-                p.get("status", "active")
+                p.get("status", "active"),
+                q_score,
+                r_status
             ))
             count += 1
         conn.commit()
@@ -215,3 +293,114 @@ def get_all_products(db_path: Path = DB_PATH) -> List[Dict[str, Any]]:
     with get_connection(db_path) as conn:
         rows = conn.execute("SELECT * FROM products ORDER BY impa_code ASC").fetchall()
         return [dict(r) for r in rows]
+
+# =====================================================================
+# Campaign, Queue & Quality Audit Layer
+# =====================================================================
+
+def get_or_create_campaign(name: str = "ShipServ Scheduled Collection", db_path: Path = DB_PATH) -> Dict[str, Any]:
+    """Retrieves active campaign or initializes default configuration."""
+    init_db(db_path)
+    now = datetime.utcnow().isoformat()
+    with get_connection(db_path) as conn:
+        row = conn.execute("SELECT * FROM scrape_campaigns ORDER BY id DESC LIMIT 1").fetchone()
+        if not row:
+            conn.execute("""
+                INSERT INTO scrape_campaigns (name, status, daily_cap, today_count, delay_profile, current_category, last_run_at, created_at)
+                VALUES (?, 'idle', 300, 0, 'stealth', '23', ?, ?)
+            """, (name, now, now))
+            conn.commit()
+            row = conn.execute("SELECT * FROM scrape_campaigns ORDER BY id DESC LIMIT 1").fetchone()
+        return dict(row)
+
+def update_campaign(data: Dict[str, Any], db_path: Path = DB_PATH) -> Dict[str, Any]:
+    """Updates campaign parameters and status."""
+    camp = get_or_create_campaign(db_path=db_path)
+    status = data.get("status", camp["status"])
+    daily_cap = data.get("daily_cap", camp["daily_cap"])
+    delay_profile = data.get("delay_profile", camp["delay_profile"])
+    current_cat = data.get("current_category", camp["current_category"])
+    today_count = data.get("today_count", camp["today_count"])
+    now = datetime.utcnow().isoformat()
+
+    with get_connection(db_path) as conn:
+        conn.execute("""
+            UPDATE scrape_campaigns
+            SET status = ?, daily_cap = ?, delay_profile = ?, current_category = ?, today_count = ?, last_run_at = ?
+            WHERE id = ?
+        """, (status, daily_cap, delay_profile, current_cat, today_count, now, camp["id"]))
+        conn.commit()
+    return get_or_create_campaign(db_path=db_path)
+
+def get_category_queue(db_path: Path = DB_PATH) -> List[Dict[str, Any]]:
+    """Retrieves status of all categories in the queue."""
+    init_db(db_path)
+    with get_connection(db_path) as conn:
+        rows = conn.execute("SELECT * FROM category_queue ORDER BY category_code ASC").fetchall()
+        return [dict(r) for r in rows]
+
+def upsert_category_queue_items(items: List[Dict[str, Any]], db_path: Path = DB_PATH) -> None:
+    """Populates or updates the category queue list."""
+    with get_connection(db_path) as conn:
+        for it in items:
+            conn.execute("""
+                INSERT INTO category_queue (category_code, category_name, slug, subcategories_total, subcategories_done, items_found, status)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(category_code) DO UPDATE SET
+                    category_name = excluded.category_name,
+                    slug = excluded.slug,
+                    subcategories_total = CASE WHEN category_queue.subcategories_total = 0 THEN excluded.subcategories_total ELSE category_queue.subcategories_total END
+            """, (
+                it["code"],
+                it["name"],
+                it["slug"],
+                it.get("subcategories_total", 0),
+                it.get("subcategories_done", 0),
+                it.get("items_found", 0),
+                it.get("status", "pending")
+            ))
+        conn.commit()
+
+def update_queue_category_progress(
+    category_code: str,
+    subcategories_done: int,
+    subcategories_total: int,
+    items_increment: int,
+    status: str,
+    db_path: Path = DB_PATH
+) -> None:
+    """Updates progress for a category in queue."""
+    now = datetime.utcnow().isoformat()
+    with get_connection(db_path) as conn:
+        conn.execute("""
+            UPDATE category_queue
+            SET subcategories_done = ?,
+                subcategories_total = MAX(subcategories_total, ?),
+                items_found = items_found + ?,
+                status = ?,
+                last_scraped_at = ?
+            WHERE category_code = ?
+        """, (subcategories_done, subcategories_total, items_increment, status, now, category_code))
+        conn.commit()
+
+def get_quality_audit(db_path: Path = DB_PATH) -> Dict[str, Any]:
+    """Provides quality audit breakdown for products."""
+    init_db(db_path)
+    with get_connection(db_path) as conn:
+        total = conn.execute("SELECT COUNT(*) FROM products").fetchone()[0]
+        verified = conn.execute("SELECT COUNT(*) FROM products WHERE review_status = 'verified'").fetchone()[0]
+        flagged = conn.execute("SELECT COUNT(*) FROM products WHERE review_status = 'flagged'").fetchone()[0]
+        missing_images = conn.execute("SELECT COUNT(*) FROM products WHERE image_url IS NULL OR image_url = ''").fetchone()[0]
+        short_desc = conn.execute("SELECT COUNT(*) FROM products WHERE LENGTH(COALESCE(description, '')) < 30").fetchone()[0]
+        avg_score_row = conn.execute("SELECT AVG(COALESCE(quality_score, 80)) FROM products").fetchone()[0]
+        avg_score = round(avg_score_row or 80)
+
+        return {
+            "total_products": total,
+            "verified_products": verified,
+            "flagged_products": flagged,
+            "missing_images": missing_images,
+            "short_descriptions": short_desc,
+            "average_quality_score": avg_score,
+            "high_quality_percentage": round((verified / total * 100)) if total > 0 else 0
+        }

@@ -68,6 +68,15 @@ export function getProducts(params: ProductsQueryParams = {}): ProductsResponse 
     queryParams.push(params.uom.toUpperCase());
   }
 
+  // Filter by Data Quality / Review Status
+  if (params.reviewStatus === "verified") {
+    conditions.push("(review_status = 'verified' OR status = 'verified' OR status = 'shipserv_verified')");
+  } else if (params.reviewStatus === "missing_images") {
+    conditions.push("(image_url IS NULL OR image_url = '')");
+  } else if (params.reviewStatus === "needs_review") {
+    conditions.push("(review_status = 'flagged' OR image_url IS NULL OR image_url = '' OR LENGTH(COALESCE(description, '')) < 30)");
+  }
+
   const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
 
   // Count total matching
@@ -77,7 +86,7 @@ export function getProducts(params: ProductsQueryParams = {}): ProductsResponse 
   const total = countResult ? countResult.count : 0;
 
   // Sorting
-  const allowedSortCols = ["impa_code", "product_name", "category_code", "scraped_at"];
+  const allowedSortCols = ["impa_code", "product_name", "category_code", "scraped_at", "quality_score"];
   const sortBy = allowedSortCols.includes(params.sortBy || "") ? params.sortBy : "impa_code";
   const sortOrder = (params.sortOrder || "asc").toLowerCase() === "desc" ? "DESC" : "ASC";
 
@@ -94,7 +103,9 @@ export function getProducts(params: ProductsQueryParams = {}): ProductsResponse 
       local_image_path,
       source_url,
       scraped_at,
-      status
+      status,
+      quality_score,
+      review_status
     FROM products
     ${whereClause}
     ORDER BY ${sortBy} ${sortOrder}
@@ -187,3 +198,140 @@ export function deleteProduct(impaCode: string): boolean {
   const result = stmt.run(impaCode);
   return result.changes > 0;
 }
+
+export function getCampaignStatus(): import("./types").CampaignStatus {
+  const db = getDb();
+  // Ensure tables exist
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS scrape_campaigns (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      status TEXT DEFAULT 'idle',
+      daily_cap INTEGER DEFAULT 300,
+      today_count INTEGER DEFAULT 0,
+      delay_profile TEXT DEFAULT 'stealth',
+      current_category TEXT,
+      last_run_at TEXT,
+      created_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS category_queue (
+      category_code TEXT PRIMARY KEY,
+      category_name TEXT NOT NULL,
+      slug TEXT NOT NULL,
+      subcategories_total INTEGER DEFAULT 0,
+      subcategories_done INTEGER DEFAULT 0,
+      items_found INTEGER DEFAULT 0,
+      status TEXT DEFAULT 'pending',
+      last_scraped_at TEXT
+    );
+  `);
+
+  let camp = db.prepare("SELECT * FROM scrape_campaigns ORDER BY id DESC LIMIT 1").get() as any;
+  if (!camp) {
+    const now = new Date().toISOString();
+    db.prepare(`
+      INSERT INTO scrape_campaigns (name, status, daily_cap, today_count, delay_profile, current_category, last_run_at, created_at)
+      VALUES ('ShipServ Scheduled Campaign', 'idle', 300, 0, 'stealth', '23', ?, ?)
+    `).run(now, now);
+    camp = db.prepare("SELECT * FROM scrape_campaigns ORDER BY id DESC LIMIT 1").get() as any;
+  }
+
+  const queueTotal = (db.prepare("SELECT COUNT(*) as c FROM category_queue").get() as any)?.c || 0;
+  const queueDone = (db.prepare("SELECT COUNT(*) as c FROM category_queue WHERE status = 'completed'").get() as any)?.c || 0;
+  const subTotal = (db.prepare("SELECT SUM(subcategories_total) as s FROM category_queue").get() as any)?.s || 0;
+  const subDone = (db.prepare("SELECT SUM(subcategories_done) as s FROM category_queue").get() as any)?.s || 0;
+
+  const progressPct = subTotal > 0 ? Math.round((subDone / subTotal) * 100) : (queueTotal > 0 ? Math.round((queueDone / queueTotal) * 100) : 0);
+
+  const delayProfile = (camp.delay_profile || "stealth") as "stealth" | "balanced" | "turbo";
+  const banRisk: "Low (Safe Mode)" | "Moderate" | "High" =
+    delayProfile === "stealth" ? "Low (Safe Mode)" : delayProfile === "balanced" ? "Moderate" : "High";
+
+  return {
+    id: camp.id,
+    name: camp.name,
+    status: camp.status,
+    daily_cap: camp.daily_cap,
+    today_count: camp.today_count || 0,
+    delay_profile: delayProfile,
+    current_category: camp.current_category || "23",
+    last_run_at: camp.last_run_at || camp.created_at,
+    created_at: camp.created_at,
+    ban_risk: banRisk,
+    total_categories_queued: queueTotal,
+    categories_completed: queueDone,
+    overall_progress_percentage: progressPct,
+  };
+}
+
+export function updateCampaignConfig(data: Partial<import("./types").CampaignStatus>): import("./types").CampaignStatus {
+  const db = getDb();
+  const current = getCampaignStatus();
+
+  const status = data.status ?? current.status;
+  const dailyCap = data.daily_cap ?? current.daily_cap;
+  const delayProfile = data.delay_profile ?? current.delay_profile;
+  const currentCat = data.current_category ?? current.current_category;
+  const now = new Date().toISOString();
+
+  db.prepare(`
+    UPDATE scrape_campaigns
+    SET status = ?, daily_cap = ?, delay_profile = ?, current_category = ?, last_run_at = ?
+    WHERE id = ?
+  `).run(status, dailyCap, delayProfile, currentCat, now, current.id);
+
+  return getCampaignStatus();
+}
+
+export function getCategoryQueue(): import("./types").CategoryQueueItem[] {
+  const db = getDb();
+  try {
+    const rows = db.prepare("SELECT * FROM category_queue ORDER BY category_code ASC").all() as any[];
+    return rows.map((r) => ({
+      category_code: r.category_code,
+      category_name: r.category_name,
+      slug: r.slug,
+      subcategories_total: r.subcategories_total || 0,
+      subcategories_done: r.subcategories_done || 0,
+      items_found: r.items_found || 0,
+      status: r.status || "pending",
+      last_scraped_at: r.last_scraped_at || null,
+    }));
+  } catch {
+    return [];
+  }
+}
+
+export function getQualityAudit(): import("./types").QualityAudit {
+  const db = getDb();
+  try {
+    const total = (db.prepare("SELECT COUNT(*) as c FROM products").get() as any)?.c || 0;
+    const verified = (db.prepare("SELECT COUNT(*) as c FROM products WHERE review_status = 'verified' OR status = 'verified'").get() as any)?.c || 0;
+    const flagged = (db.prepare("SELECT COUNT(*) as c FROM products WHERE review_status = 'flagged'").get() as any)?.c || 0;
+    const missingImages = (db.prepare("SELECT COUNT(*) as c FROM products WHERE image_url IS NULL OR image_url = ''").get() as any)?.c || 0;
+    const shortDesc = (db.prepare("SELECT COUNT(*) as c FROM products WHERE LENGTH(COALESCE(description, '')) < 30").get() as any)?.c || 0;
+    const avgScoreRow = (db.prepare("SELECT AVG(COALESCE(quality_score, 80)) as avg FROM products").get() as any)?.avg;
+    const avgScore = Math.round(avgScoreRow || 80);
+
+    return {
+      total_products: total,
+      verified_products: verified,
+      flagged_products: flagged,
+      missing_images: missingImages,
+      short_descriptions: shortDesc,
+      average_quality_score: avgScore,
+      high_quality_percentage: total > 0 ? Math.round((verified / total) * 100) : 0,
+    };
+  } catch {
+    return {
+      total_products: 0,
+      verified_products: 0,
+      flagged_products: 0,
+      missing_images: 0,
+      short_descriptions: 0,
+      average_quality_score: 80,
+      high_quality_percentage: 0,
+    };
+  }
+}
+
