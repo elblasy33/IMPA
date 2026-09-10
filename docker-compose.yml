@@ -14,6 +14,7 @@ services:
     volumes:
       # Shared persistent volume for SQLite WAL database, images, and exports
       - ./data:/app/data
+      - ./scraper:/app/scraper
     environment:
       - NODE_ENV=production
       - PORT=3000
@@ -41,6 +42,7 @@ services:
     volumes:
       # Mounts the exact same SQLite database volume in WAL mode
       - ./data:/app/data
+      - ./scraper:/app/scraper
     environment:
       - PYTHONUNBUFFERED=1
       - IMPA_DB_PATH=/app/data/impa_catalog.db
